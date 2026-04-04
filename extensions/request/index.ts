@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
 import { Text } from "@mariozechner/pi-tui";
-import { readdir, readFile, writeFile, mkdir, rename, rm, stat } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
@@ -619,162 +619,6 @@ Keep the log file updated to allow pausing and resuming without losing context.`
     },
   });
 
-  // === /req read <id> ===
-  pi.registerCommand("req-read", {
-    description: "Read a request file: /req read <id> [file]",
-    getArgumentCompletions: async (prefix: string) => {
-      return getAutocompleteForPrefix(prefix, () => true);
-    },
-    handler: async (args, ctx) => {
-      const parts = args?.trim().split(/\s+/) || [];
-      const id = parts[0];
-      const fileType = parts[1]?.toLowerCase();
-      
-      if (!id) {
-        ctx.ui.notify("Usage: /req read <id> [file]", "warning");
-        return;
-      }
-
-      // Determine which file to read
-      let filePath: string;
-      let content: string | null = null;
-
-      switch (fileType) {
-        case "prd":
-          content = await readPrdFile(ctx.cwd, id);
-          filePath = getPrdFilePath(ctx.cwd, id);
-          break;
-        case "plan":
-          content = await readPlanFile(ctx.cwd, id);
-          filePath = getPlanFilePath(ctx.cwd, id);
-          break;
-        case "log":
-          content = await readLogFile(ctx.cwd, id);
-          filePath = getLogFilePath(ctx.cwd, id);
-          break;
-        case "interview":
-          content = await readInterviewFile(ctx.cwd, id);
-          filePath = getInterviewFilePath(ctx.cwd, id);
-          break;
-        default:
-          // Default to request.md
-          content = await readRequestFile(ctx.cwd, id);
-          filePath = getRequestFilePath(ctx.cwd, id);
-      }
-
-      if (content === null) {
-        ctx.ui.notify(`File not found: ${filePath}`, "error");
-        return;
-      }
-
-      ctx.ui.setEditorText(content);
-    },
-  });
-
-  // === /req migrate ===
-  pi.registerCommand("req-migrate", {
-    description: "Migrate old flat file structure to new directory structure",
-    handler: async (_args, ctx) => {
-      const oldDir = join(ctx.cwd, REQUEST_DIR);
-      
-      if (!existsSync(oldDir)) {
-        ctx.ui.notify("No .pi/request directory found.", "info");
-        return;
-      }
-
-      // Get all files in old directory
-      const files = await readdir(oldDir);
-      
-      // Group files by ID
-      const fileGroups: Record<string, string[]> = {};
-      
-      for (const file of files) {
-        // Parse ID from filename
-        // Old format: <id>.md, <id>.plan.md, <id>.log.md, <id>.interview.md
-        const match = file.match(/^(.+)\.(plan|log|interview)\.md$/);
-        if (match) {
-          const id = match[1];
-          if (!fileGroups[id]) fileGroups[id] = [];
-          fileGroups[id].push(file);
-        } else if (file.endsWith(".md") && !file.includes(".")) {
-          // It's an ID without suffix (already migrated or old request file)
-          const id = file.replace(".md", "");
-          if (!fileGroups[id]) fileGroups[id] = [];
-          fileGroups[id].push(file);
-        } else if (file.endsWith(".md")) {
-          // Extract ID from filename like <timestamp>-<slug>.md
-          const idMatch = file.match(/^(.+)\.md$/);
-          if (idMatch) {
-            const id = idMatch[1];
-            if (!fileGroups[id]) fileGroups[id] = [];
-            fileGroups[id].push(file);
-          }
-        }
-      }
-
-      // Also check for legacy suffixed files
-      for (const file of files) {
-        const fullPath = join(oldDir, file);
-        const fileStat = await stat(fullPath);
-        if (!fileStat.isFile()) continue;
-        
-        // Pattern: <id>.plan.md, <id>.log.md, <id>.interview.md
-        const planMatch = file.match(/^(.+)\.plan\.md$/);
-        const logMatch = file.match(/^(.+)\.log\.md$/);
-        const interviewMatch = file.match(/^(.+)\.interview\.md$/);
-        
-        if (planMatch || logMatch || interviewMatch) {
-          // Already processed in loop above
-        }
-      }
-
-      ctx.ui.notify(`Found ${Object.keys(fileGroups).length} requests to migrate`, "info");
-
-      let migrated = 0;
-      let skipped = 0;
-
-      for (const [id, files] of Object.entries(fileGroups)) {
-        // Check if already migrated (directory exists)
-        const targetDir = getRequestDir(ctx.cwd, id);
-        if (existsSync(targetDir)) {
-          skipped++;
-          continue;
-        }
-
-        // Create directory
-        await ensureRequestDir(ctx.cwd, id);
-
-        for (const file of files) {
-          const oldPath = join(oldDir, file);
-          let newPath: string;
-
-          if (file === `${id}.md`) {
-            newPath = getRequestFilePath(ctx.cwd, id);
-          } else if (file.endsWith(".plan.md")) {
-            newPath = getPlanFilePath(ctx.cwd, id);
-          } else if (file.endsWith(".log.md")) {
-            newPath = getLogFilePath(ctx.cwd, id);
-          } else if (file.endsWith(".interview.md")) {
-            newPath = getInterviewFilePath(ctx.cwd, id);
-          } else {
-            continue;
-          }
-
-          // Read and write to new location
-          const content = await readFile(oldPath, "utf-8");
-          await writeFile(newPath, content, "utf-8");
-          
-          // Remove old file
-          await rm(oldPath);
-        }
-
-        migrated++;
-      }
-
-      ctx.ui.notify(`Migration complete: ${migrated} migrated, ${skipped} skipped (already migrated)`, "info");
-    },
-  });
-
   // === Main /req command router ===
   pi.registerCommand("req", {
     description: "Request workflow manager",
@@ -792,9 +636,7 @@ Keep the log file updated to allow pausing and resuming without losing context.`
           "/req plan <id>     - Create plan with prd-to-plan\n" +
           "/req impl <id>      - Start implementation\n" +
           "/req status <id>   - Show request status\n" +
-          "/req read <id>      - Read request file\n" +
-          "/req done <id>      - Mark as done\n" +
-          "/req migrate        - Migrate old files to directories",
+          "/req done <id>      - Mark as done",
           "info"
         );
         return;
@@ -859,24 +701,12 @@ Keep the log file updated to allow pausing and resuming without losing context.`
           pi.sendUserMessage(`/req-status ${subargs}`, { deliverAs: "followUp" });
           break;
 
-        case "read":
-          if (!subargs) {
-            ctx.ui.notify("Usage: /req read <id> [file]", "warning");
-            return;
-          }
-          pi.sendUserMessage(`/req-read ${subargs}`, { deliverAs: "followUp" });
-          break;
-
         case "done":
           if (!subargs) {
             ctx.ui.notify("Usage: /req done <id>", "warning");
             return;
           }
           pi.sendUserMessage(`/req-done ${subargs}`, { deliverAs: "followUp" });
-          break;
-
-        case "migrate":
-          pi.sendUserMessage(`/req-migrate`, { deliverAs: "followUp" });
           break;
 
         default:
