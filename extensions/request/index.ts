@@ -212,10 +212,6 @@ status: idea
 
 <!-- Initial thoughts, context, ideas -->
 
-## Interview Results
-
-<!-- Filled by /req analyze session -->
-
 `;
 
   await writeRequestFile(cwd, id, content);
@@ -328,6 +324,22 @@ export default function (pi: ExtensionAPI) {
       const updated = content.replace(/^status:.*$/m, "status: analyzing");
       await writeRequestFile(ctx.cwd, id, updated);
 
+      // Initialize interview.md with template
+      const interviewTemplate = `# Interview: ${id}
+
+## Transcript
+
+<!-- Q&A session goes here -->
+
+---
+
+## Refined Understanding
+
+<!-- Summary of key insights, decisions, and open questions -->
+
+`;
+      await writeInterviewFile(ctx.cwd, id, interviewTemplate);
+
       ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
       
       // Wait for agent to finish current processing, then send messages
@@ -350,9 +362,8 @@ ${content}
 Please analyze this request using the grill-me framework.
 
 After the interview is complete:
-1. Append the final refined understanding to the "## Interview Results" section in: \`${REQUEST_DIR}/${id}/request.md\`
-2. Save the full interview transcript to: \`${REQUEST_DIR}/${id}/interview.md\`
-3. Write a complete PRD to: \`${REQUEST_DIR}/${id}/prd.md\`
+1. Save the full interview transcript to: \`${REQUEST_DIR}/${id}/interview.md\`
+2. Write a complete PRD to: \`${REQUEST_DIR}/${id}/prd.md\`
 
 Use the following PRD template:
 
@@ -427,8 +438,8 @@ Additional notes about the feature.`;
 ### Original Request
 ${requestContent}
 
-### Interview Results (from /req analyze)
-${interviewContent || "_No interview conducted yet. Consider running /req analyze first._"}
+### Interview
+${interviewContent || "_No interview conducted yet. Run /req analyze first._"}
 
 ---
 
