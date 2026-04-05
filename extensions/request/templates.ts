@@ -105,26 +105,8 @@ export function formatLogTemplate(context: TemplateContext): string {
   });
 }
 
-// === Analyze message (sent to agent) ===
-export const analyzeMessageTemplate = `/skill:{{skillPath}}
-
----
-
-## Request to Analyze
-
-{{content}}
-
----
-
-Please analyze this request using the grill-me framework.
-
-After the interview is complete:
-1. Save the full interview transcript to: \`{{requestDir}}/{{id}}/interview.md\`
-2. Write a complete PRD to: \`{{requestDir}}/{{id}}/prd.md\`
-
-Use the following PRD template:
-
-## Problem Statement
+// === PRD file template ===
+export const prdTemplate = `## Problem Statement
 The problem from the user's perspective.
 
 ## Solution
@@ -150,6 +132,55 @@ Things not included in this PRD.
 ## Further Notes
 Additional notes about the feature.`;
 
+export function formatPrdTemplate(context: TemplateContext): string {
+  return interpolate(prdTemplate, context);
+}
+
+// === Plan file template ===
+export const planTemplate = `# Plan: {{title}}
+
+> Source PRD: {{requestDir}}/{{id}}/prd.md
+
+## Phase 1: [Title]
+
+<!-- What to build -->
+
+### Acceptance criteria
+- [ ] 
+
+## Phase 2: [Title]
+
+<!-- What to build -->
+
+### Acceptance criteria
+- [ ] `;
+
+export function formatPlanTemplate(context: TemplateContext): string {
+  return interpolate(planTemplate, {
+    title: context.title || "Feature",
+    ...context,
+  });
+}
+
+// === Analyze message (sent to agent) ===
+export const analyzeMessageTemplate = `/skill:{{skillPath}}
+
+---
+
+## Request to Analyze
+
+{{content}}
+
+---
+
+Please analyze this request using the grill-me framework.
+
+After the interview is complete:
+1. Save the full interview transcript to: \`{{requestDir}}/{{id}}/interview.md\`
+2. Fill in the PRD template at: \`{{requestDir}}/{{id}}/prd.md\`
+
+The PRD template has been created. Fill in each section with the analysis results.`;
+
 export function formatAnalyzeMessage(context: TemplateContext): string {
   return interpolate(analyzeMessageTemplate, context);
 }
@@ -171,9 +202,9 @@ export const planMessageTemplate = `/skill:{{skillPath}}
 
 Please create a phased implementation plan using tracer bullet vertical slices.
 
-**Important output path**: \`{{requestDir}}/{{id}}/plan.md\`
+Fill in the plan template at: \`{{requestDir}}/{{id}}/plan.md\`
 
-The plan should be written directly to this path instead of the default \`./docs/plans/\`.`;
+The plan template has been created. Fill in each phase with the implementation details.`;
 
 export function formatPlanMessage(context: TemplateContext): string {
   return interpolate(planMessageTemplate, {

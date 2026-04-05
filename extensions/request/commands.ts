@@ -6,30 +6,31 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import {
+  INTERVIEW_FILE,
+  LOG_FILE,
+  PLAN_FILE,
+  REQUEST_DIR,
+  REQUEST_FILE,
+  SKILL_GRILL_ME,
+  SKILL_PRD_TO_PLAN,
   createRequest,
   formatStatus,
   getAutocompleteForPrefix,
   listRequests,
   parseRequestMetadata,
   readRequestFile,
-  writeRequestFile,
-  REQUEST_DIR,
-  REQUEST_FILE,
-  INTERVIEW_FILE,
-  LOG_FILE,
-  PLAN_FILE,
-  SKILL_GRILL_ME,
-  SKILL_PRD_TO_PLAN,
   saveSessionCwd,
+  writeRequestFile,
   type RequestMetadata,
 } from "./lib";
-
 import {
+  formatAnalyzeMessage,
+  formatImplMessage,
   formatInterviewTemplate,
   formatLogTemplate,
-  formatAnalyzeMessage,
   formatPlanMessage,
-  formatImplMessage,
+  formatPlanTemplate,
+  formatPrdTemplate,
   renderStatusTemplate,
   type StatusContext,
 } from "./templates";
@@ -96,15 +97,21 @@ export function registerReqAnalyze(pi: ExtensionAPI): void {
         return;
       }
 
+      // Update status to analyzing
       const updated = content.replace(/^status:.*$/m, "status: analyzing");
       await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
+      // Create template files first
       const interviewContent = formatInterviewTemplate({ id });
       await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewContent);
+
+      const prdContent = formatPrdTemplate({ id });
+      await writeRequestFile(ctx.cwd, id, "prd.md", prdContent);
 
       ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
       await ctx.waitForIdle();
 
+      // Send minimal message pointing to the prd.md file
       const message = formatAnalyzeMessage({
         skillPath: SKILL_GRILL_ME,
         id,
@@ -133,18 +140,37 @@ export function registerReqPlan(pi: ExtensionAPI): void {
       const id = args.trim();
       const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
       const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+      const prdContent = await readRequestFile(ctx.cwd, id, "prd.md");
 
       if (!requestContent) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
         return;
       }
 
+      // Validate prd.md has content (more than just template)
+      if (!prdContent || prdContent.trim().length < 100) {
+        ctx.ui.notify(
+          `PRD not ready for ${id}. Fill in prd.md first or run /req analyze.`,
+          "error"
+        );
+        return;
+      }
+
+      // Get title for plan template
+      const meta = await parseRequestMetadata(ctx.cwd, id);
+
+      // Update status to planned
       const updated = requestContent.replace(/^status:.*$/m, "status: planned");
       await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+
+      // Create plan template first
+      const planContent = formatPlanTemplate({ id, title: meta?.title });
+      await writeRequestFile(ctx.cwd, id, PLAN_FILE, planContent);
 
       ctx.ui.notify(`Starting planning session for: ${id}`, "info");
       await ctx.waitForIdle();
 
+      // Send minimal message pointing to the plan.md file
       const message = formatPlanMessage({
         skillPath: SKILL_PRD_TO_PLAN,
         id,
