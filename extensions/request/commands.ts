@@ -202,18 +202,6 @@ export function registerReq(pi: ExtensionAPI): void {
   });
 }
 
-// === Register all commands ===
-export function registerCommands(pi: ExtensionAPI): void {
-  registerReqLog(pi);
-  registerReqList(pi);
-  registerReqAnalyze(pi);
-  registerReqPlan(pi);
-  registerReqImpl(pi);
-  registerReqStatus(pi);
-  registerReqDone(pi);
-  registerReq(pi);
-}
-
 // === Register message renderer ===
 export function registerMessageRenderer(pi: ExtensionAPI): void {
   pi.registerMessageRenderer("req-list", (message, _options, theme) => {

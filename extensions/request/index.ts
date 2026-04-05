@@ -1,6 +1,16 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { setSessionCwd } from "./lib";
-import { registerCommands, registerMessageRenderer } from "./commands";
+import {
+  registerReqLog,
+  registerReqList,
+  registerReqAnalyze,
+  registerReqPlan,
+  registerReqImpl,
+  registerReqStatus,
+  registerReqDone,
+  registerReq,
+  registerMessageRenderer,
+} from "./commands";
 
 export default function (pi: ExtensionAPI) {
   // Set session cwd on startup
@@ -10,5 +20,12 @@ export default function (pi: ExtensionAPI) {
 
   // Register message renderer and commands
   registerMessageRenderer(pi);
-  registerCommands(pi);
+  registerReqLog(pi);
+  registerReqList(pi);
+  registerReqAnalyze(pi);
+  registerReqPlan(pi);
+  registerReqImpl(pi);
+  registerReqStatus(pi);
+  registerReqDone(pi);
+  registerReq(pi);
 }
