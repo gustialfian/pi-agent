@@ -3,7 +3,7 @@
  * All business logic, types, and helper functions
  */
 
-import type { ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ import {
 
 // === Constants ===
 export const REQUEST_DIR = ".pi/request";
+export const SESSION_TYPE = "req-session";
 
 export const REQUEST_FILE = "request.md";
 export const INTERVIEW_FILE = "interview.md";
@@ -31,11 +32,21 @@ export const LOG_FILE = "log.md";
 export const SKILL_GRILL_ME = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
 export const SKILL_PRD_TO_PLAN = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
 
-// === Session state ===
+// === Session state (set in session_start event) ===
 let sessionCwd = "";
 
-export function setSessionCwd(cwd: string): void {
+// === Session persistence ===
+export function saveSessionCwd(pi: ExtensionAPI, cwd: string): void {
   sessionCwd = cwd;
+  pi.appendEntry(SESSION_TYPE, { cwd });
+}
+
+export function setSessionCwdFromContext(cwd: string): void {
+  sessionCwd = cwd;
+}
+
+export function getSessionCwd(): string {
+  return sessionCwd || process.cwd();
 }
 
 // === ID helpers ===
@@ -178,7 +189,7 @@ export async function getAutocompleteForPrefix(
   prefix: string,
   filterFn: (r: RequestMetadata) => boolean
 ): Promise<AutocompleteItem[]> {
-  const cwd = sessionCwd || process.cwd();
+  const cwd = getSessionCwd();
   const requests = await listRequests(cwd);
   return requests
     .filter((r) => r.id.startsWith(prefix))

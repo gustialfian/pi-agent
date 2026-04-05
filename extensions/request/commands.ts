@@ -3,7 +3,7 @@
  * Register commands with pi extension
  */
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import {
   createRequest,
@@ -15,6 +15,8 @@ import {
   handlePlan,
   handleStatus,
   listRequests,
+  saveSessionCwd,
+  setSessionCwdFromContext,
   type RequestMetadata,
 } from "./lib";
 
@@ -23,12 +25,20 @@ function formatRequestList(requests: RequestMetadata[]): string {
   return requests.map((r) => `${formatStatus(r.status)} ${r.id} - ${r.title}`).join("\n");
 }
 
+// === Session start: restore cwd ===
+export function registerSessionStart(pi: ExtensionAPI): void {
+  pi.on("session_start", async (_event, ctx) => {
+    setSessionCwdFromContext(ctx.cwd);
+  });
+}
+
 // === Command: /req log ===
 export function registerReqLog(pi: ExtensionAPI): void {
   pi.registerCommand("req-log", {
     description: "Log a new request/idea: /req log \"your idea\"",
     getArgumentCompletions: () => null,
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req log \"your idea title\"", "warning");
         return;
@@ -44,6 +54,7 @@ export function registerReqList(pi: ExtensionAPI): void {
   pi.registerCommand("req-list", {
     description: "List all requests",
     handler: async (_args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       const requests = await listRequests(ctx.cwd);
       if (requests.length === 0) {
         ctx.ui.notify("No requests yet. Use /req log \"title\" to create one.", "info");
@@ -65,6 +76,7 @@ export function registerReqAnalyze(pi: ExtensionAPI): void {
     getArgumentCompletions: async (prefix: string) =>
       getAutocompleteForPrefix(prefix, () => true),
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req analyze <id>", "warning");
         return;
@@ -81,6 +93,7 @@ export function registerReqPlan(pi: ExtensionAPI): void {
     getArgumentCompletions: async (prefix: string) =>
       getAutocompleteForPrefix(prefix, (r) => ["idea", "analyzing", "planned"].includes(r.status)),
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req plan <id>", "warning");
         return;
@@ -97,6 +110,7 @@ export function registerReqImpl(pi: ExtensionAPI): void {
     getArgumentCompletions: async (prefix: string) =>
       getAutocompleteForPrefix(prefix, (r) => r.status === "planned"),
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req impl <id>", "warning");
         return;
@@ -113,6 +127,7 @@ export function registerReqStatus(pi: ExtensionAPI): void {
     getArgumentCompletions: async (prefix: string) =>
       getAutocompleteForPrefix(prefix, () => true),
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       const id = args?.trim();
       if (!id) {
         ctx.ui.notify("Usage: /req status <id>", "warning");
@@ -130,6 +145,7 @@ export function registerReqDone(pi: ExtensionAPI): void {
     getArgumentCompletions: async (prefix: string) =>
       getAutocompleteForPrefix(prefix, (r) => r.status === "implementing"),
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req done <id>", "warning");
         return;
@@ -144,6 +160,7 @@ export function registerReq(pi: ExtensionAPI): void {
   pi.registerCommand("req", {
     description: "Request workflow manager",
     handler: async (args, ctx) => {
+      saveSessionCwd(pi, ctx.cwd);
       const parts = args?.trim().split(/\s+/) || [];
       const subcommand = parts[0]?.toLowerCase();
       const subargs = parts.slice(1).join(" ");
