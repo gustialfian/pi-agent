@@ -470,6 +470,8 @@ The plan should be written directly to this path instead of the default \`./docs
 
       const id = args.trim();
       const requestContent = await readRequestFile(ctx.cwd, id);
+      const prdContent = await readPrdFile(ctx.cwd, id);
+      const interviewContent = await readInterviewFile(ctx.cwd, id);
       const planContent = await readPlanFile(ctx.cwd, id);
       
       if (!requestContent) {
@@ -523,6 +525,14 @@ The plan should be written directly to this path instead of the default \`./docs
 ### Original Request
 
 ${requestContent}
+
+### PRD (Product Requirements)
+
+${prdContent || '_No PRD found. Run /req analyze first._'}
+
+### Interview Notes
+
+${interviewContent || '_No interview conducted yet. Run /req analyze first._'}
 
 ### Implementation Plan
 

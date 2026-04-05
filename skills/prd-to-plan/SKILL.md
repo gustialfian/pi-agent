@@ -9,9 +9,15 @@ Break a PRD into a phased implementation plan using vertical slices (tracer bull
 
 ## Process
 
-### 1. Confirm the PRD is in context
+### 1. Find and read the PRD file
 
-The PRD should already be in the conversation. If it isn't, ask the user to paste it or point you to the file.
+The PRD must be explicitly read before proceeding. Look for the PRD file in the current project directory:
+
+1. Search for files with "PRD" in the name: `find . -iname "*prd*" -type f 2>/dev/null`
+2. Check common locations: `./PRD.md`, `./prd.md`, `./docs/prd.md`, `./docs/PRD.md`
+3. If the user is working in a project with a `request.md` or `interview.md`, the PRD is often in the same directory or a `docs/` subdirectory
+
+**IMPORTANT**: Once found, explicitly read the entire PRD file content. The PRD is the source of truth - do NOT proceed without it. If no PRD exists, ask the user to create one first or point you to it.
 
 ### 2. Explore the codebase
 
