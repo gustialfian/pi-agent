@@ -11,7 +11,7 @@ import {
   formatAnalyzeMessage,
   formatPlanMessage,
   formatImplMessage,
-  formatStatus,
+  renderStatusTemplate,
   type StatusContext,
 } from "./templates";
 
@@ -427,7 +427,7 @@ export default function (pi: ExtensionAPI) {
         logMissing: !logContent,
       };
 
-      const summary = formatStatus(statusContext);
+      const summary = renderStatusTemplate(statusContext);
       pi.sendMessage({ customType: "req-status", content: summary, display: true });
     },
   });

@@ -16,6 +16,7 @@ export interface TemplateContext {
   created?: string;
   status?: string;
   timestamp?: number;
+  started?: string;
 }
 
 function interpolate(template: string, context: TemplateContext): string {
@@ -252,7 +253,7 @@ export interface StatusContext extends TemplateContext {
   logMissing?: boolean;
 }
 
-export function formatStatus(context: StatusContext): string {
+export function renderStatusTemplate(context: StatusContext): string {
   return interpolate(statusTemplate, context)
     .replace("{{prdExists}}- ✅ PRD\n", "")
     .replace("{{prdMissing}}- ⬜ PRD (none)\n", "")
