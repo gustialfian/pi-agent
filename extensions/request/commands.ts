@@ -9,15 +9,30 @@ import {
   createRequest,
   formatStatus,
   getAutocompleteForPrefix,
-  handleAnalyze,
-  handleDone,
-  handleImpl,
-  handlePlan,
-  handleStatus,
   listRequests,
+  parseRequestMetadata,
+  readRequestFile,
+  writeRequestFile,
+  REQUEST_DIR,
+  REQUEST_FILE,
+  INTERVIEW_FILE,
+  LOG_FILE,
+  PLAN_FILE,
+  SKILL_GRILL_ME,
+  SKILL_PRD_TO_PLAN,
   saveSessionCwd,
   type RequestMetadata,
 } from "./lib";
+
+import {
+  formatInterviewTemplate,
+  formatLogTemplate,
+  formatAnalyzeMessage,
+  formatPlanMessage,
+  formatImplMessage,
+  renderStatusTemplate,
+  type StatusContext,
+} from "./templates";
 
 // === Helper to format request list ===
 function formatRequestList(requests: RequestMetadata[]): string {
@@ -73,13 +88,31 @@ export function registerReqAnalyze(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req analyze <id>", "warning");
         return;
       }
-      await handleAnalyze(
-        ctx.cwd,
-        args.trim(),
-        (msg, opts) => pi.sendUserMessage(msg, opts),
-        ctx.ui,
-        () => ctx.waitForIdle()
-      );
+
+      const id = args.trim();
+      const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      if (!content) {
+        ctx.ui.notify(`Request not found: ${id}`, "error");
+        return;
+      }
+
+      const updated = content.replace(/^status:.*$/m, "status: analyzing");
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+
+      const interviewContent = formatInterviewTemplate({ id });
+      await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewContent);
+
+      ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
+      await ctx.waitForIdle();
+
+      const message = formatAnalyzeMessage({
+        skillPath: SKILL_GRILL_ME,
+        id,
+        content,
+        requestDir: REQUEST_DIR,
+      });
+
+      pi.sendUserMessage(message, { deliverAs: "steer" });
     },
   });
 }
@@ -96,13 +129,31 @@ export function registerReqPlan(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req plan <id>", "warning");
         return;
       }
-      await handlePlan(
-        ctx.cwd,
-        args.trim(),
-        (msg, opts) => pi.sendUserMessage(msg, opts),
-        ctx.ui,
-        () => ctx.waitForIdle()
-      );
+
+      const id = args.trim();
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+
+      if (!requestContent) {
+        ctx.ui.notify(`Request not found: ${id}`, "error");
+        return;
+      }
+
+      const updated = requestContent.replace(/^status:.*$/m, "status: planned");
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+
+      ctx.ui.notify(`Starting planning session for: ${id}`, "info");
+      await ctx.waitForIdle();
+
+      const message = formatPlanMessage({
+        skillPath: SKILL_PRD_TO_PLAN,
+        id,
+        requestContent,
+        interviewContent: interviewContent ?? undefined,
+        requestDir: REQUEST_DIR,
+      });
+
+      pi.sendUserMessage(message, { deliverAs: "steer" });
     },
   });
 }
@@ -119,13 +170,42 @@ export function registerReqImpl(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req impl <id>", "warning");
         return;
       }
-      await handleImpl(
-        ctx.cwd,
-        args.trim(),
-        (msg, opts) => pi.sendUserMessage(msg, opts),
-        ctx.ui,
-        () => ctx.waitForIdle()
-      );
+
+      const id = args.trim();
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const prdContent = await readRequestFile(ctx.cwd, id, "prd.md");
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+      const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
+
+      if (!requestContent) {
+        ctx.ui.notify(`Request not found: ${id}`, "error");
+        return;
+      }
+
+      if (!planContent) {
+        ctx.ui.notify(`No plan found for ${id}. Run /req plan ${id} first.`, "error");
+        return;
+      }
+
+      const logContent = formatLogTemplate({ id, requestDir: REQUEST_DIR });
+      await writeRequestFile(ctx.cwd, id, LOG_FILE, logContent);
+
+      const updated = requestContent.replace(/^status:.*$/m, "status: implementing");
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+
+      ctx.ui.notify(`Starting implementation for: ${id}`, "info");
+      await ctx.waitForIdle();
+
+      const message = formatImplMessage({
+        id,
+        requestContent,
+        prdContent: prdContent ?? undefined,
+        interviewContent: interviewContent ?? undefined,
+        planContent,
+        requestDir: REQUEST_DIR,
+      });
+
+      pi.sendUserMessage(message, { deliverAs: "steer" });
     },
   });
 }
@@ -143,12 +223,39 @@ export function registerReqStatus(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req status <id>", "warning");
         return;
       }
-      await handleStatus(
-        ctx.cwd,
+
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
+      const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+
+      if (!requestContent) {
+        ctx.ui.notify(`Request not found: ${id}`, "error");
+        return;
+      }
+
+      const meta = await parseRequestMetadata(ctx.cwd, id);
+      const prdContent = await readRequestFile(ctx.cwd, id, "prd.md");
+
+      const statusContext: StatusContext = {
         id,
-        (msg) => pi.sendMessage(msg),
-        ctx.ui
-      );
+        title: meta?.title || "Unknown",
+        created: meta?.timestamp ? new Date(meta.timestamp).toISOString() : "Unknown",
+        statusIcon: formatStatus(meta?.status || "idea").split(" ")[0],
+        status: meta?.status || "idea",
+        requestDir: REQUEST_DIR,
+        prdExists: !!prdContent,
+        prdMissing: !prdContent,
+        interviewExists: !!interviewContent,
+        interviewMissing: !interviewContent,
+        planExists: !!planContent,
+        planMissing: !planContent,
+        logExists: !!logContent,
+        logMissing: !logContent,
+      };
+
+      const summary = renderStatusTemplate(statusContext);
+      pi.sendMessage({ customType: "req-status", content: summary, display: true });
     },
   });
 }
@@ -165,7 +272,26 @@ export function registerReqDone(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req done <id>", "warning");
         return;
       }
-      await handleDone(ctx.cwd, args.trim(), ctx.ui);
+
+      const id = args.trim();
+      const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      if (!content) {
+        ctx.ui.notify(`Request not found: ${id}`, "error");
+        return;
+      }
+
+      const updated = content.replace(/^status:.*$/m, "status: done");
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+
+      const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
+      if (logContent) {
+        const completedLog = logContent
+          .replace(/## Progress/, `## Progress\n\n- [x] Implementation complete!`)
+          .replace(/### Checkpoint 1:/, `### Completed: ${new Date().toISOString()}\n\n### Checkpoint 1:`);
+        await writeRequestFile(ctx.cwd, id, LOG_FILE, completedLog);
+      }
+
+      ctx.ui.notify(`Request marked as done: ${id}`, "info");
     },
   });
 }
