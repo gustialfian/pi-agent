@@ -4,6 +4,16 @@ import { Text } from "@mariozechner/pi-tui";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import {
+  formatRequestTemplate,
+  formatInterviewTemplate,
+  formatLogTemplate,
+  formatAnalyzeMessage,
+  formatPlanMessage,
+  formatImplMessage,
+  formatStatus,
+  type StatusContext,
+} from "./templates";
 
 const REQUEST_DIR = ".pi/request";
 
@@ -13,6 +23,10 @@ const INTERVIEW_FILE = "interview.md";
 const PRD_FILE = "prd.md";
 const PLAN_FILE = "plan.md";
 const LOG_FILE = "log.md";
+
+// Skill paths
+const SKILL_GRILL_ME = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
+const SKILL_PRD_TO_PLAN = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
 
 // Store cwd for autocomplete - will be set on session start
 let sessionCwd = "";
@@ -137,25 +151,7 @@ async function createRequest(cwd: string, title: string): Promise<string> {
   
   await ensureRequestDir(cwd, id);
   
-  const content = `---
-id: ${id}
-title: ${title}
-created: ${new Date(timestamp).toISOString()}
-status: idea
----
-
-# ${title}
-
-## Problem Statement
-
-<!-- What problem does this solve? -->
-
-## Notes
-
-<!-- Initial thoughts, context, ideas -->
-
-`;
-
+  const content = formatRequestTemplate({ id, title });
   await writeRequestFile(cwd, id, REQUEST_FILE, content);
   return id;
 }
@@ -267,73 +263,21 @@ export default function (pi: ExtensionAPI) {
       await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
       // Initialize interview.md with template
-      const interviewTemplate = `# Interview: ${id}
-
-## Transcript
-
-<!-- Q&A session goes here -->
-
----
-
-## Refined Understanding
-
-<!-- Summary of key insights, decisions, and open questions -->
-
-`;
-      await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewTemplate);
+      const interviewContent = formatInterviewTemplate({ id });
+      await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewContent);
 
       ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
       
       // Wait for agent to finish current processing, then send messages
       await ctx.waitForIdle();
       
-      // Send the grill-me skill prompt with the request content
-      const skillPath = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
-      
-      // Combine skill invocation with context in one message
-      const message = `/skill:${skillPath}
-      
----
-
-## Request to Analyze
-
-${content}
-
----
-
-Please analyze this request using the grill-me framework.
-
-After the interview is complete:
-1. Save the full interview transcript to: \`${REQUEST_DIR}/${id}/interview.md\`
-2. Write a complete PRD to: \`${REQUEST_DIR}/${id}/prd.md\`
-
-Use the following PRD template:
-
-## Problem Statement
-The problem from the user's perspective.
-
-## Solution
-The solution from the user's perspective.
-
-## User Stories
-A numbered list of user stories in format:
-1. As an <actor>, I want <feature>, so that <benefit>
-
-## Implementation Decisions
-- Modules to build/modify
-- Interfaces changes
-- Technical clarifications
-- Architectural decisions
-
-## Testing Decisions
-- What makes a good test
-- Which modules will be tested
-
-## Out of Scope
-Things not included in this PRD.
-
-## Further Notes
-Additional notes about the feature.`;
+      // Build message using template
+      const message = formatAnalyzeMessage({
+        skillPath: SKILL_GRILL_ME,
+        id,
+        content,
+        requestDir: REQUEST_DIR,
+      });
       
       pi.sendUserMessage(message, { deliverAs: "steer" });
     },
@@ -371,28 +315,14 @@ Additional notes about the feature.`;
       // Wait for agent to finish current processing
       await ctx.waitForIdle();
       
-      // Use prd-to-plan skill
-      const skillPath = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
-      
-      // Build context with request and interview results
-      const context = `## Request: ${id}
-
-### Original Request
-${requestContent}
-
-### Interview
-${interviewContent || "_No interview conducted yet. Run /req analyze first._"}
-
----
-
-Please create a phased implementation plan using tracer bullet vertical slices.
-
-**Important output path**: \`${REQUEST_DIR}/${id}/plan.md\`
-
-The plan should be written directly to this path instead of the default \`./docs/plans/\`.`;
-
-      // Combine skill invocation with context in one message
-      const message = `/skill:${skillPath}\n\n---\n\n${context}`;
+      // Build message using template
+      const message = formatPlanMessage({
+        skillPath: SKILL_PRD_TO_PLAN,
+        id,
+        requestContent,
+        interviewContent: interviewContent ?? undefined,
+        requestDir: REQUEST_DIR,
+      });
       
       pi.sendUserMessage(message, { deliverAs: "steer" });
     },
@@ -427,29 +357,7 @@ The plan should be written directly to this path instead of the default \`./docs
       }
 
       // Initialize the log file
-      const logContent = `# Implementation Log: ${id}
-
-## Started: ${new Date().toISOString()}
-
-## Request
-\`${REQUEST_DIR}/${id}/request.md\`
-
-## Plan
-\`${REQUEST_DIR}/${id}/plan.md\`
-
-## Progress
-
-- [ ] Implementation tasks...
-
-## Checkpoints
-
-### Checkpoint 1: ${new Date().toISOString()}
-<!-- Document progress at this point -->
-
----
-*Update this log file to track progress. This allows pausing and resuming.*
-
-`;
+      const logContent = formatLogTemplate({ id, requestDir: REQUEST_DIR });
       await writeRequestFile(ctx.cwd, id, LOG_FILE, logContent);
 
       // Update status to implementing
@@ -461,39 +369,17 @@ The plan should be written directly to this path instead of the default \`./docs
       // Wait for agent to finish current processing
       await ctx.waitForIdle();
 
-      // Send implementation context to start working
-      const implMessage = `## Implementation Session for: ${id}
-
-### Original Request
-
-${requestContent}
-
-### PRD (Product Requirements)
-
-${prdContent || '_No PRD found. Run /req analyze first._'}
-
-### Interview Notes
-
-${interviewContent || '_No interview conducted yet. Run /req analyze first._'}
-
-### Implementation Plan
-
-${planContent}
-
----
-
-### Progress Log
-
-Track progress in: \`${REQUEST_DIR}/${id}/log.md\`
-
-**Workflow:**
-1. Work on implementation tasks from the plan
-2. Update the log file with checkpoints as you progress
-3. When done, use \`/req done ${id}\` to mark completion
-
-Keep the log file updated to allow pausing and resuming without losing context.`;
+      // Build message using template
+      const message = formatImplMessage({
+        id,
+        requestContent,
+        prdContent: prdContent ?? undefined,
+        interviewContent: interviewContent ?? undefined,
+        planContent,
+        requestDir: REQUEST_DIR,
+      });
       
-      pi.sendUserMessage(implMessage, { deliverAs: "steer" });
+      pi.sendUserMessage(message, { deliverAs: "steer" });
     },
   });
 
@@ -523,20 +409,25 @@ Keep the log file updated to allow pausing and resuming without losing context.`
 
       const meta = await parseRequestMetadata(ctx.cwd, id);
       const prdContent = await readRequestFile(ctx.cwd, id, PRD_FILE);
-      const summary = [
-        `Request: ${id}`,
-        `Status: ${formatStatus(meta?.status || "idea")}`,
-        `Title: ${meta?.title || "Unknown"}`,
-        `Created: ${meta?.timestamp ? new Date(meta.timestamp).toISOString() : "Unknown"}`,
-        "",
-        "Files:",
-        `- Request: ${REQUEST_DIR}/${id}/request.md`,
-        prdContent ? `- ✅ PRD` : `- ⬜ PRD (none)`,
-        interviewContent ? `- ✅ Interview` : `- ⬜ Interview (none)`,
-        planContent ? `- ✅ Plan` : `- ⬜ Plan (none)`,
-        logContent ? `- 🔨 Log` : `- ⬜ Log (none)`,
-      ].join("\n");
+      
+      const statusContext: StatusContext = {
+        id,
+        title: meta?.title || "Unknown",
+        created: meta?.timestamp ? new Date(meta.timestamp).toISOString() : "Unknown",
+        statusIcon: formatStatus(meta?.status || "idea").split(" ")[0],
+        status: meta?.status || "idea",
+        requestDir: REQUEST_DIR,
+        prdExists: !!prdContent,
+        prdMissing: !prdContent,
+        interviewExists: !!interviewContent,
+        interviewMissing: !interviewContent,
+        planExists: !!planContent,
+        planMissing: !planContent,
+        logExists: !!logContent,
+        logMissing: !logContent,
+      };
 
+      const summary = formatStatus(statusContext);
       pi.sendMessage({ customType: "req-status", content: summary, display: true });
     },
   });
@@ -596,9 +487,9 @@ Keep the log file updated to allow pausing and resuming without losing context.`
           "/req log \"title\"    - Create new request\n" +
           "/req list           - List all requests\n" +
           "/req analyze <id>   - Analyze with grill-me\n" +
-          "/req plan <id>     - Create plan with prd-to-plan\n" +
+          "/req plan <id>      - Create plan with prd-to-plan\n" +
           "/req impl <id>      - Start implementation\n" +
-          "/req status <id>   - Show request status\n" +
+          "/req status <id>    - Show request status\n" +
           "/req done <id>      - Mark as done",
           "info"
         );
