@@ -175,6 +175,7 @@ export function registerReqPlan(pi: ExtensionAPI): void {
         skillPath: SKILL_PRD_TO_PLAN,
         id,
         requestContent,
+        prdContent,
         interviewContent: interviewContent ?? undefined,
         requestDir: REQUEST_DIR,
       });

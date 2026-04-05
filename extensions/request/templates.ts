@@ -195,6 +195,9 @@ export const planMessageTemplate = `/skill:{{skillPath}}
 ### Original Request
 {{requestContent}}
 
+### PRD
+{{prdContent}}
+
 ### Interview
 {{interviewContent}}
 
@@ -208,6 +211,7 @@ The plan template has been created. Fill in each phase with the implementation d
 
 export function formatPlanMessage(context: TemplateContext): string {
   return interpolate(planMessageTemplate, {
+    prdContent: context.prdContent || "_No PRD found. Run /req analyze first._",
     interviewContent: context.interviewContent || "_No interview conducted yet. Run /req analyze first._",
     ...context,
   });
