@@ -39,24 +39,8 @@ function getRequestDir(cwd: string, id: string): string {
   return join(cwd, REQUEST_DIR, id);
 }
 
-function getRequestFilePath(cwd: string, id: string): string {
-  return join(getRequestDir(cwd, id), REQUEST_FILE);
-}
-
-function getInterviewFilePath(cwd: string, id: string): string {
-  return join(getRequestDir(cwd, id), INTERVIEW_FILE);
-}
-
-function getPrdFilePath(cwd: string, id: string): string {
-  return join(getRequestDir(cwd, id), PRD_FILE);
-}
-
-function getPlanFilePath(cwd: string, id: string): string {
-  return join(getRequestDir(cwd, id), PLAN_FILE);
-}
-
-function getLogFilePath(cwd: string, id: string): string {
-  return join(getRequestDir(cwd, id), LOG_FILE);
+function getRequestPath(cwd: string, id: string, filename: string): string {
+  return join(getRequestDir(cwd, id), filename);
 }
 
 async function ensureRequestDir(cwd: string, id: string): Promise<string> {
@@ -83,56 +67,14 @@ async function getRequestDirs(cwd: string): Promise<string[]> {
   return dirs.sort().reverse();
 }
 
-async function readRequestFile(cwd: string, id: string): Promise<string | null> {
-  const file = getRequestFilePath(cwd, id);
+async function readRequestFile(cwd: string, id: string, filename: string): Promise<string | null> {
+  const file = getRequestPath(cwd, id, filename);
   if (!existsSync(file)) return null;
   return readFile(file, "utf-8");
 }
 
-async function writeRequestFile(cwd: string, id: string, content: string): Promise<void> {
-  const file = getRequestFilePath(cwd, id);
-  await writeFile(file, content, "utf-8");
-}
-
-async function readPlanFile(cwd: string, id: string): Promise<string | null> {
-  const file = getPlanFilePath(cwd, id);
-  if (!existsSync(file)) return null;
-  return readFile(file, "utf-8");
-}
-
-async function readLogFile(cwd: string, id: string): Promise<string | null> {
-  const file = getLogFilePath(cwd, id);
-  if (!existsSync(file)) return null;
-  return readFile(file, "utf-8");
-}
-
-async function readInterviewFile(cwd: string, id: string): Promise<string | null> {
-  const file = getInterviewFilePath(cwd, id);
-  if (!existsSync(file)) return null;
-  return readFile(file, "utf-8");
-}
-
-async function readPrdFile(cwd: string, id: string): Promise<string | null> {
-  const file = getPrdFilePath(cwd, id);
-  if (!existsSync(file)) return null;
-  return readFile(file, "utf-8");
-}
-
-async function writeLogFile(cwd: string, id: string, content: string): Promise<void> {
-  await ensureRequestDir(cwd, id);
-  const file = getLogFilePath(cwd, id);
-  await writeFile(file, content, "utf-8");
-}
-
-async function writeInterviewFile(cwd: string, id: string, content: string): Promise<void> {
-  await ensureRequestDir(cwd, id);
-  const file = getInterviewFilePath(cwd, id);
-  await writeFile(file, content, "utf-8");
-}
-
-async function writePlanFile(cwd: string, id: string, content: string): Promise<void> {
-  await ensureRequestDir(cwd, id);
-  const file = getPlanFilePath(cwd, id);
+async function writeRequestFile(cwd: string, id: string, filename: string, content: string): Promise<void> {
+  const file = getRequestPath(cwd, id, filename);
   await writeFile(file, content, "utf-8");
 }
 
@@ -144,7 +86,7 @@ interface RequestMetadata {
 }
 
 async function parseRequestMetadata(cwd: string, id: string): Promise<RequestMetadata | null> {
-  const content = await readRequestFile(cwd, id);
+  const content = await readRequestFile(cwd, id, REQUEST_FILE);
   if (!content) return null;
 
   const parsed = parseId(id);
@@ -214,7 +156,7 @@ status: idea
 
 `;
 
-  await writeRequestFile(cwd, id, content);
+  await writeRequestFile(cwd, id, REQUEST_FILE, content);
   return id;
 }
 
@@ -313,7 +255,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const id = args.trim();
-      const content = await readRequestFile(ctx.cwd, id);
+      const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
       
       if (!content) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
@@ -322,7 +264,7 @@ export default function (pi: ExtensionAPI) {
 
       // Update status to analyzing
       const updated = content.replace(/^status:.*$/m, "status: analyzing");
-      await writeRequestFile(ctx.cwd, id, updated);
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
       // Initialize interview.md with template
       const interviewTemplate = `# Interview: ${id}
@@ -338,7 +280,7 @@ export default function (pi: ExtensionAPI) {
 <!-- Summary of key insights, decisions, and open questions -->
 
 `;
-      await writeInterviewFile(ctx.cwd, id, interviewTemplate);
+      await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewTemplate);
 
       ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
       
@@ -412,8 +354,8 @@ Additional notes about the feature.`;
       }
 
       const id = args.trim();
-      const requestContent = await readRequestFile(ctx.cwd, id);
-      const interviewContent = await readInterviewFile(ctx.cwd, id);
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
       
       if (!requestContent) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
@@ -422,7 +364,7 @@ Additional notes about the feature.`;
 
       // Update status to planned
       const updated = requestContent.replace(/^status:.*$/m, "status: planned");
-      await writeRequestFile(ctx.cwd, id, updated);
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
       ctx.ui.notify(`Starting planning session for: ${id}`, "info");
 
@@ -469,10 +411,10 @@ The plan should be written directly to this path instead of the default \`./docs
       }
 
       const id = args.trim();
-      const requestContent = await readRequestFile(ctx.cwd, id);
-      const prdContent = await readPrdFile(ctx.cwd, id);
-      const interviewContent = await readInterviewFile(ctx.cwd, id);
-      const planContent = await readPlanFile(ctx.cwd, id);
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const prdContent = await readRequestFile(ctx.cwd, id, PRD_FILE);
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+      const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
       
       if (!requestContent) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
@@ -508,11 +450,11 @@ The plan should be written directly to this path instead of the default \`./docs
 *Update this log file to track progress. This allows pausing and resuming.*
 
 `;
-      await writeLogFile(ctx.cwd, id, logContent);
+      await writeRequestFile(ctx.cwd, id, LOG_FILE, logContent);
 
       // Update status to implementing
       const updated = requestContent.replace(/^status:.*$/m, "status: implementing");
-      await writeRequestFile(ctx.cwd, id, updated);
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
       ctx.ui.notify(`Starting implementation for: ${id}`, "info");
 
@@ -569,10 +511,10 @@ Keep the log file updated to allow pausing and resuming without losing context.`
         return;
       }
 
-      const requestContent = await readRequestFile(ctx.cwd, id);
-      const planContent = await readPlanFile(ctx.cwd, id);
-      const logContent = await readLogFile(ctx.cwd, id);
-      const interviewContent = await readInterviewFile(ctx.cwd, id);
+      const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+      const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
+      const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
+      const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
 
       if (!requestContent) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
@@ -580,7 +522,7 @@ Keep the log file updated to allow pausing and resuming without losing context.`
       }
 
       const meta = await parseRequestMetadata(ctx.cwd, id);
-      const prdContent = await readPrdFile(ctx.cwd, id);
+      const prdContent = await readRequestFile(ctx.cwd, id, PRD_FILE);
       const summary = [
         `Request: ${id}`,
         `Status: ${formatStatus(meta?.status || "idea")}`,
@@ -612,7 +554,7 @@ Keep the log file updated to allow pausing and resuming without losing context.`
       }
 
       const id = args.trim();
-      const content = await readRequestFile(ctx.cwd, id);
+      const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
       
       if (!content) {
         ctx.ui.notify(`Request not found: ${id}`, "error");
@@ -621,10 +563,10 @@ Keep the log file updated to allow pausing and resuming without losing context.`
 
       // Update status to done
       const updated = content.replace(/^status:.*$/m, "status: done");
-      await writeRequestFile(ctx.cwd, id, updated);
+      await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
 
       // Update log if exists
-      const logContent = await readLogFile(ctx.cwd, id);
+      const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
       if (logContent) {
         const completedLog = logContent.replace(
           /## Progress/,
@@ -633,7 +575,7 @@ Keep the log file updated to allow pausing and resuming without losing context.`
           /### Checkpoint 1:/,
           `### Completed: ${new Date().toISOString()}\n\n### Checkpoint 1:`
         );
-        await writeLogFile(ctx.cwd, id, completedLog);
+        await writeRequestFile(ctx.cwd, id, LOG_FILE, completedLog);
       }
 
       ctx.ui.notify(`Request marked as done: ${id}`, "info");
