@@ -3,7 +3,7 @@
  * All business logic, types, and helper functions
  */
 
-import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,21 +32,9 @@ export const LOG_FILE = "log.md";
 export const SKILL_GRILL_ME = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
 export const SKILL_PRD_TO_PLAN = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
 
-// === Session state (set in session_start event) ===
-let sessionCwd = "";
-
 // === Session persistence ===
 export function saveSessionCwd(pi: ExtensionAPI, cwd: string): void {
-  sessionCwd = cwd;
   pi.appendEntry(SESSION_TYPE, { cwd });
-}
-
-export function setSessionCwdFromContext(cwd: string): void {
-  sessionCwd = cwd;
-}
-
-export function getSessionCwd(): string {
-  return sessionCwd || process.cwd();
 }
 
 // === ID helpers ===
@@ -186,10 +174,10 @@ export function formatStatus(status: RequestStatus): string {
 
 // === Autocomplete ===
 export async function getAutocompleteForPrefix(
+  cwd: string,
   prefix: string,
   filterFn: (r: RequestMetadata) => boolean
 ): Promise<AutocompleteItem[]> {
-  const cwd = getSessionCwd();
   const requests = await listRequests(cwd);
   return requests
     .filter((r) => r.id.startsWith(prefix))
@@ -199,24 +187,26 @@ export async function getAutocompleteForPrefix(
 
 // === Command handlers ===
 export async function handleAnalyze(
-  ctx: ExtensionCommandContext,
+  cwd: string,
   id: string,
-  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void
+  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void,
+  ui: { notify: (msg: string, type?: "error" | "info" | "warning") => void },
+  waitForIdle: () => Promise<void>
 ): Promise<void> {
-  const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+  const content = await readRequestFile(cwd, id, REQUEST_FILE);
   if (!content) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ui.notify(`Request not found: ${id}`, "error");
     return;
   }
 
   const updated = content.replace(/^status:.*$/m, "status: analyzing");
-  await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+  await writeRequestFile(cwd, id, REQUEST_FILE, updated);
 
   const interviewContent = formatInterviewTemplate({ id });
-  await writeRequestFile(ctx.cwd, id, INTERVIEW_FILE, interviewContent);
+  await writeRequestFile(cwd, id, INTERVIEW_FILE, interviewContent);
 
-  ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
-  await ctx.waitForIdle();
+  ui.notify(`Starting analysis session for: ${id}`, "info");
+  await waitForIdle();
 
   const message = formatAnalyzeMessage({
     skillPath: SKILL_GRILL_ME,
@@ -229,23 +219,25 @@ export async function handleAnalyze(
 }
 
 export async function handlePlan(
-  ctx: ExtensionCommandContext,
+  cwd: string,
   id: string,
-  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void
+  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void,
+  ui: { notify: (msg: string, type?: "error" | "info" | "warning") => void },
+  waitForIdle: () => Promise<void>
 ): Promise<void> {
-  const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
-  const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+  const requestContent = await readRequestFile(cwd, id, REQUEST_FILE);
+  const interviewContent = await readRequestFile(cwd, id, INTERVIEW_FILE);
   
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ui.notify(`Request not found: ${id}`, "error");
     return;
   }
 
   const updated = requestContent.replace(/^status:.*$/m, "status: planned");
-  await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+  await writeRequestFile(cwd, id, REQUEST_FILE, updated);
 
-  ctx.ui.notify(`Starting planning session for: ${id}`, "info");
-  await ctx.waitForIdle();
+  ui.notify(`Starting planning session for: ${id}`, "info");
+  await waitForIdle();
 
   const message = formatPlanMessage({
     skillPath: SKILL_PRD_TO_PLAN,
@@ -259,33 +251,35 @@ export async function handlePlan(
 }
 
 export async function handleImpl(
-  ctx: ExtensionCommandContext,
+  cwd: string,
   id: string,
-  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void
+  sendUserMessage: (msg: string, opts: { deliverAs?: "steer" | "followUp" }) => void,
+  ui: { notify: (msg: string, type?: "error" | "info" | "warning") => void },
+  waitForIdle: () => Promise<void>
 ): Promise<void> {
-  const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
-  const prdContent = await readRequestFile(ctx.cwd, id, PRD_FILE);
-  const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
-  const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
+  const requestContent = await readRequestFile(cwd, id, REQUEST_FILE);
+  const prdContent = await readRequestFile(cwd, id, PRD_FILE);
+  const interviewContent = await readRequestFile(cwd, id, INTERVIEW_FILE);
+  const planContent = await readRequestFile(cwd, id, PLAN_FILE);
   
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ui.notify(`Request not found: ${id}`, "error");
     return;
   }
 
   if (!planContent) {
-    ctx.ui.notify(`No plan found for ${id}. Run /req plan ${id} first.`, "error");
+    ui.notify(`No plan found for ${id}. Run /req plan ${id} first.`, "error");
     return;
   }
 
   const logContent = formatLogTemplate({ id, requestDir: REQUEST_DIR });
-  await writeRequestFile(ctx.cwd, id, LOG_FILE, logContent);
+  await writeRequestFile(cwd, id, LOG_FILE, logContent);
 
   const updated = requestContent.replace(/^status:.*$/m, "status: implementing");
-  await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+  await writeRequestFile(cwd, id, REQUEST_FILE, updated);
 
-  ctx.ui.notify(`Starting implementation for: ${id}`, "info");
-  await ctx.waitForIdle();
+  ui.notify(`Starting implementation for: ${id}`, "info");
+  await waitForIdle();
 
   const message = formatImplMessage({
     id,
@@ -300,22 +294,23 @@ export async function handleImpl(
 }
 
 export async function handleStatus(
-  ctx: ExtensionCommandContext,
+  cwd: string,
   id: string,
-  sendMessage: (msg: { customType: string; content: string; display: boolean }) => void
+  sendMessage: (msg: { customType: string; content: string; display: boolean }) => void,
+  ui: { notify: (msg: string, type?: "error" | "info" | "warning") => void }
 ): Promise<void> {
-  const requestContent = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
-  const planContent = await readRequestFile(ctx.cwd, id, PLAN_FILE);
-  const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
-  const interviewContent = await readRequestFile(ctx.cwd, id, INTERVIEW_FILE);
+  const requestContent = await readRequestFile(cwd, id, REQUEST_FILE);
+  const planContent = await readRequestFile(cwd, id, PLAN_FILE);
+  const logContent = await readRequestFile(cwd, id, LOG_FILE);
+  const interviewContent = await readRequestFile(cwd, id, INTERVIEW_FILE);
 
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ui.notify(`Request not found: ${id}`, "error");
     return;
   }
 
-  const meta = await parseRequestMetadata(ctx.cwd, id);
-  const prdContent = await readRequestFile(ctx.cwd, id, PRD_FILE);
+  const meta = await parseRequestMetadata(cwd, id);
+  const prdContent = await readRequestFile(cwd, id, PRD_FILE);
   
   const statusContext: StatusContext = {
     id,
@@ -339,25 +334,26 @@ export async function handleStatus(
 }
 
 export async function handleDone(
-  ctx: ExtensionCommandContext,
-  id: string
+  cwd: string,
+  id: string,
+  ui: { notify: (msg: string, type?: "error" | "info" | "warning") => void }
 ): Promise<void> {
-  const content = await readRequestFile(ctx.cwd, id, REQUEST_FILE);
+  const content = await readRequestFile(cwd, id, REQUEST_FILE);
   if (!content) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ui.notify(`Request not found: ${id}`, "error");
     return;
   }
 
   const updated = content.replace(/^status:.*$/m, "status: done");
-  await writeRequestFile(ctx.cwd, id, REQUEST_FILE, updated);
+  await writeRequestFile(cwd, id, REQUEST_FILE, updated);
 
-  const logContent = await readRequestFile(ctx.cwd, id, LOG_FILE);
+  const logContent = await readRequestFile(cwd, id, LOG_FILE);
   if (logContent) {
     const completedLog = logContent
       .replace(/## Progress/, `## Progress\n\n- [x] Implementation complete!`)
       .replace(/### Checkpoint 1:/, `### Completed: ${new Date().toISOString()}\n\n### Checkpoint 1:`);
-    await writeRequestFile(ctx.cwd, id, LOG_FILE, completedLog);
+    await writeRequestFile(cwd, id, LOG_FILE, completedLog);
   }
 
-  ctx.ui.notify(`Request marked as done: ${id}`, "info");
+  ui.notify(`Request marked as done: ${id}`, "info");
 }

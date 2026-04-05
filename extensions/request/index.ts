@@ -1,6 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
-  registerSessionStart,
   registerReqLog,
   registerReqList,
   registerReqAnalyze,
@@ -13,10 +12,6 @@ import {
 } from "./commands";
 
 export default function (pi: ExtensionAPI) {
-  // Register session start handler to restore cwd
-  registerSessionStart(pi);
-
-  // Register message renderer and commands
   registerMessageRenderer(pi);
   registerReqLog(pi);
   registerReqList(pi);

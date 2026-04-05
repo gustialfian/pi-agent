@@ -16,20 +16,12 @@ import {
   handleStatus,
   listRequests,
   saveSessionCwd,
-  setSessionCwdFromContext,
   type RequestMetadata,
 } from "./lib";
 
 // === Helper to format request list ===
 function formatRequestList(requests: RequestMetadata[]): string {
   return requests.map((r) => `${formatStatus(r.status)} ${r.id} - ${r.title}`).join("\n");
-}
-
-// === Session start: restore cwd ===
-export function registerSessionStart(pi: ExtensionAPI): void {
-  pi.on("session_start", async (_event, ctx) => {
-    setSessionCwdFromContext(ctx.cwd);
-  });
 }
 
 // === Command: /req log ===
@@ -74,14 +66,20 @@ export function registerReqAnalyze(pi: ExtensionAPI): void {
   pi.registerCommand("req-analyze", {
     description: "Analyze/refine a request using grill-me: /req analyze <id>",
     getArgumentCompletions: async (prefix: string) =>
-      getAutocompleteForPrefix(prefix, () => true),
+      getAutocompleteForPrefix(process.cwd(), prefix, () => true),
     handler: async (args, ctx) => {
       saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req analyze <id>", "warning");
         return;
       }
-      await handleAnalyze(ctx, args.trim(), (msg, opts) => pi.sendUserMessage(msg, opts));
+      await handleAnalyze(
+        ctx.cwd,
+        args.trim(),
+        (msg, opts) => pi.sendUserMessage(msg, opts),
+        ctx.ui,
+        () => ctx.waitForIdle()
+      );
     },
   });
 }
@@ -91,14 +89,20 @@ export function registerReqPlan(pi: ExtensionAPI): void {
   pi.registerCommand("req-plan", {
     description: "Create implementation plan for a request: /req plan <id>",
     getArgumentCompletions: async (prefix: string) =>
-      getAutocompleteForPrefix(prefix, (r) => ["idea", "analyzing", "planned"].includes(r.status)),
+      getAutocompleteForPrefix(process.cwd(), prefix, (r) => ["idea", "analyzing", "planned"].includes(r.status)),
     handler: async (args, ctx) => {
       saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req plan <id>", "warning");
         return;
       }
-      await handlePlan(ctx, args.trim(), (msg, opts) => pi.sendUserMessage(msg, opts));
+      await handlePlan(
+        ctx.cwd,
+        args.trim(),
+        (msg, opts) => pi.sendUserMessage(msg, opts),
+        ctx.ui,
+        () => ctx.waitForIdle()
+      );
     },
   });
 }
@@ -108,14 +112,20 @@ export function registerReqImpl(pi: ExtensionAPI): void {
   pi.registerCommand("req-impl", {
     description: "Start implementation for a request: /req impl <id>",
     getArgumentCompletions: async (prefix: string) =>
-      getAutocompleteForPrefix(prefix, (r) => r.status === "planned"),
+      getAutocompleteForPrefix(process.cwd(), prefix, (r) => r.status === "planned"),
     handler: async (args, ctx) => {
       saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req impl <id>", "warning");
         return;
       }
-      await handleImpl(ctx, args.trim(), (msg, opts) => pi.sendUserMessage(msg, opts));
+      await handleImpl(
+        ctx.cwd,
+        args.trim(),
+        (msg, opts) => pi.sendUserMessage(msg, opts),
+        ctx.ui,
+        () => ctx.waitForIdle()
+      );
     },
   });
 }
@@ -125,7 +135,7 @@ export function registerReqStatus(pi: ExtensionAPI): void {
   pi.registerCommand("req-status", {
     description: "Show status of a request: /req status <id>",
     getArgumentCompletions: async (prefix: string) =>
-      getAutocompleteForPrefix(prefix, () => true),
+      getAutocompleteForPrefix(process.cwd(), prefix, () => true),
     handler: async (args, ctx) => {
       saveSessionCwd(pi, ctx.cwd);
       const id = args?.trim();
@@ -133,7 +143,12 @@ export function registerReqStatus(pi: ExtensionAPI): void {
         ctx.ui.notify("Usage: /req status <id>", "warning");
         return;
       }
-      await handleStatus(ctx, id, (msg) => pi.sendMessage(msg));
+      await handleStatus(
+        ctx.cwd,
+        id,
+        (msg) => pi.sendMessage(msg),
+        ctx.ui
+      );
     },
   });
 }
@@ -143,14 +158,14 @@ export function registerReqDone(pi: ExtensionAPI): void {
   pi.registerCommand("req-done", {
     description: "Mark a request as done: /req done <id>",
     getArgumentCompletions: async (prefix: string) =>
-      getAutocompleteForPrefix(prefix, (r) => r.status === "implementing"),
+      getAutocompleteForPrefix(process.cwd(), prefix, (r) => r.status === "implementing"),
     handler: async (args, ctx) => {
       saveSessionCwd(pi, ctx.cwd);
       if (!args?.trim()) {
         ctx.ui.notify("Usage: /req done <id>", "warning");
         return;
       }
-      await handleDone(ctx, args.trim());
+      await handleDone(ctx.cwd, args.trim(), ctx.ui);
     },
   });
 }
