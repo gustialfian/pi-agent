@@ -26,8 +26,15 @@ export const SKILL_GRILL_ME = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
 export const SKILL_PRD_TO_PLAN = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
 
 // === Session persistence ===
+let cachedCwd: string | null = null;
+
 export function saveSessionCwd(pi: ExtensionAPI, cwd: string): void {
+  cachedCwd = cwd;
   pi.appendEntry(SESSION_TYPE, { cwd });
+}
+
+export function getCachedCwd(): string {
+  return cachedCwd || process.cwd();
 }
 
 // === ID helpers ===
@@ -166,14 +173,127 @@ export function formatStatus(status: RequestStatus): string {
 }
 
 // === Autocomplete ===
+
+// Simple fuzzy match - checks if all chars appear in order
+function fuzzyMatch(text: string, pattern: string): boolean {
+  const lowerText = text.toLowerCase();
+  const lowerPattern = pattern.toLowerCase();
+  let textIdx = 0;
+  for (const char of lowerPattern) {
+    const found = lowerText.indexOf(char, textIdx);
+    if (found === -1) return false;
+    textIdx = found + 1;
+  }
+  return true;
+}
+
+// Score for sorting: higher = more relevant
+function getRelevanceScore(
+  r: RequestMetadata,
+  pattern: string,
+  hasFiles: { prd: boolean; plan: boolean; log: boolean; interview: boolean }
+): number {
+  let score = 0;
+  const lowerPattern = pattern.toLowerCase();
+
+  // Exact ID prefix match gets highest priority
+  if (r.id.startsWith(pattern)) score += 100;
+  // Fuzzy ID match
+  else if (fuzzyMatch(r.id, pattern)) score += 50;
+  // Fuzzy title match
+  else if (fuzzyMatch(r.title, pattern)) score += 30;
+  // No pattern = neutral
+  else score += 10;
+
+  // Status progression priority (recent states first)
+  const statusOrder: Record<RequestStatus, number> = {
+    implementing: 5,
+    analyzing: 4,
+    planned: 3,
+    idea: 2,
+    done: 1,
+  };
+  score += statusOrder[r.status] * 10;
+
+  // Files existing = more actionable
+  if (hasFiles.prd) score += 5;
+  if (hasFiles.plan) score += 3;
+  if (hasFiles.log) score += 2;
+
+  // Timestamp (newer = higher score)
+  score += r.timestamp / 1e12;
+
+  return score;
+}
+
+interface RequestFileFlags {
+  prd: boolean;
+  plan: boolean;
+  log: boolean;
+  interview: boolean;
+}
+
+async function getRequestFileFlags(
+  cwd: string,
+  id: string
+): Promise<RequestFileFlags> {
+  const [prd, plan, log, interview] = await Promise.all([
+    readRequestFile(cwd, id, PRD_FILE),
+    readRequestFile(cwd, id, PLAN_FILE),
+    readRequestFile(cwd, id, LOG_FILE),
+    readRequestFile(cwd, id, INTERVIEW_FILE),
+  ]);
+  return {
+    prd: !!prd,
+    plan: !!plan,
+    log: !!log,
+    interview: !!interview,
+  };
+}
+
 export async function getAutocompleteForPrefix(
   cwd: string,
   prefix: string,
   filterFn: (r: RequestMetadata) => boolean
 ): Promise<AutocompleteItem[]> {
   const requests = await listRequests(cwd);
-  return requests
-    .filter((r) => r.id.startsWith(prefix))
-    .filter(filterFn)
-    .map((r) => ({ value: r.id, label: `${r.id} - ${r.title}` }));
+
+  // Filter by status filter + fuzzy match on ID or title
+  const filtered = requests.filter((r) => {
+    if (!filterFn(r)) return false;
+    if (!prefix) return true;
+    return (
+      r.id.toLowerCase().includes(prefix.toLowerCase()) ||
+      r.title.toLowerCase().includes(prefix.toLowerCase()) ||
+      fuzzyMatch(r.id, prefix) ||
+      fuzzyMatch(r.title, prefix)
+    );
+  });
+
+  // Get file flags for all filtered requests in parallel
+  const withFlags = await Promise.all(
+    filtered.map(async (r) => ({
+      ...r,
+      files: await getRequestFileFlags(cwd, r.id),
+    }))
+  );
+
+  // Sort by relevance
+  withFlags.sort((a, b) => getRelevanceScore(b, prefix, b.files) - getRelevanceScore(a, prefix, a.files));
+
+  return withFlags.map((r) => {
+    const statusIcon = formatStatus(r.status).split(" ")[0];
+    const flags = [
+      r.files.prd ? "✓prd" : "✗prd",
+      r.files.plan ? "✓plan" : "✗plan",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return {
+      value: r.id,
+      label: `${statusIcon} ${r.id} - ${r.title}`,
+      description: flags || undefined,
+    };
+  });
 }
