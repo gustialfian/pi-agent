@@ -5,9 +5,10 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import {
   formatRequestTemplate,
 } from "./templates";
@@ -22,13 +23,20 @@ export const PRD_FILE = "prd.md";
 export const PLAN_FILE = "plan.md";
 export const LOG_FILE = "log.md";
 
-export const SKILL_GRILL_ME = "/home/alfian/.pi/agent/skills/grill-me/SKILL.md";
-export const SKILL_PRD_TO_PLAN = "/home/alfian/.pi/agent/skills/prd-to-plan/SKILL.md";
+// Resolve paths relative to the extension's location
+export function getSkillPath(skillName: string): string {
+  // Use environment variable or fall back to relative path from extension dir
+  const basePath = process.env.PI_AGENT_PATH || join(homedir(), ".pi/agent");
+  return join(basePath, "skills", skillName, "SKILL.md");
+}
+
+export const SKILL_GRILL_ME = getSkillPath("grill-me");
+export const SKILL_PRD_TO_PLAN = getSkillPath("prd-to-plan");
 
 // === Session persistence ===
 let cachedCwd: string | null = null;
 
-export function saveSessionCwd(pi: ExtensionAPI, cwd: string): void {
+export async function saveSessionCwd(pi: ExtensionAPI, cwd: string): Promise<void> {
   cachedCwd = cwd;
   pi.appendEntry(SESSION_TYPE, { cwd });
 }
@@ -51,9 +59,23 @@ export function generateId(timestamp: number, slug: string): string {
 }
 
 export function parseId(id: string): { timestamp: number; slug: string } | null {
-  const match = id.match(/^(\d+)-(.+)$/);
+  // Validate input: must be string with expected format
+  if (typeof id !== "string" || !id.trim()) return null;
+  
+  const match = id.match(/^(\d+)-([a-z0-9-]+)$/);
   if (!match) return null;
-  return { timestamp: Number(match[1]), slug: match[2] };
+  
+  const timestamp = Number(match[1]);
+  // Validate timestamp is a reasonable number (not NaN, not negative, not too far in future)
+  if (!Number.isFinite(timestamp) || timestamp <= 0 || timestamp > Date.now() + 86400000) {
+    return null;
+  }
+  
+  const slug = match[2];
+  // Validate slug length (should be <= 50 due to slugify limitation)
+  if (slug.length > 50 || slug.length === 0) return null;
+  
+  return { timestamp, slug };
 }
 
 // === File path helpers ===
@@ -78,21 +100,50 @@ export async function getRequestDirs(cwd: string): Promise<string[]> {
   if (!existsSync(dir)) return [];
   const entries = await readdir(dir);
   const dirs: string[] = [];
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-    const stat = await import("node:fs/promises").then(fs => fs.stat(fullPath));
-    if (stat.isDirectory()) {
+  
+  // Parallel stat checks
+  const results = await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = join(dir, entry);
+      const statResult = await stat(fullPath);
+      return { entry, isDir: statResult.isDirectory() };
+    })
+  );
+  
+  for (const { entry, isDir } of results) {
+    if (isDir) {
       dirs.push(entry);
     }
   }
+  
   return dirs.sort().reverse();
 }
 
 // === File I/O ===
 export async function readRequestFile(cwd: string, id: string, filename: string): Promise<string | null> {
   const file = getRequestPath(cwd, id, filename);
-  if (!existsSync(file)) return null;
-  return readFile(file, "utf-8");
+  // readFile handles missing files gracefully (throws if not exists)
+  try {
+    return await readFile(file, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error; // Re-throw other errors (permissions, etc.)
+  }
+}
+
+// Helper to read multiple request files in parallel
+export async function readRequestFiles(cwd: string, id: string) {
+  const trimmed = id.trim();
+  const [request, prd, interview, plan, log] = await Promise.all([
+    readRequestFile(cwd, trimmed, REQUEST_FILE),
+    readRequestFile(cwd, trimmed, PRD_FILE),
+    readRequestFile(cwd, trimmed, INTERVIEW_FILE),
+    readRequestFile(cwd, trimmed, PLAN_FILE),
+    readRequestFile(cwd, trimmed, LOG_FILE),
+  ]);
+  return { request, prd, interview, plan, log };
 }
 
 export async function writeRequestFile(cwd: string, id: string, filename: string, content: string): Promise<void> {
@@ -138,14 +189,13 @@ export async function parseRequestMetadata(cwd: string, id: string): Promise<Req
 
 export async function listRequests(cwd: string): Promise<RequestMetadata[]> {
   const dirs = await getRequestDirs(cwd);
-  const requests: RequestMetadata[] = [];
   
-  for (const id of dirs) {
-    const meta = await parseRequestMetadata(cwd, id);
-    if (meta) requests.push(meta);
-  }
+  // Parse all requests in parallel
+  const results = await Promise.all(
+    dirs.map((id) => parseRequestMetadata(cwd, id))
+  );
   
-  return requests;
+  return results.filter((meta): meta is RequestMetadata => meta !== null);
 }
 
 // === Request operations ===
@@ -253,20 +303,26 @@ async function getRequestFileFlags(
 
 export async function getAutocompleteForPrefix(
   cwd: string,
-  prefix: string,
-  filterFn: (r: RequestMetadata) => boolean
+  filterFn: (r: RequestMetadata) => boolean,
+  options: {
+    /** Filter pattern for fuzzy matching against ID/title */
+    filterPattern?: string;
+    /** Prefix to prepend to the autocomplete value (e.g., "analyze ") */
+    valuePrefix?: string;
+  } = {}
 ): Promise<AutocompleteItem[]> {
+  const { filterPattern = "", valuePrefix = "" } = options;
   const requests = await listRequests(cwd);
 
   // Filter by status filter + fuzzy match on ID or title
   const filtered = requests.filter((r) => {
     if (!filterFn(r)) return false;
-    if (!prefix) return true;
+    if (!filterPattern) return true;
     return (
-      r.id.toLowerCase().includes(prefix.toLowerCase()) ||
-      r.title.toLowerCase().includes(prefix.toLowerCase()) ||
-      fuzzyMatch(r.id, prefix) ||
-      fuzzyMatch(r.title, prefix)
+      r.id.toLowerCase().includes(filterPattern.toLowerCase()) ||
+      r.title.toLowerCase().includes(filterPattern.toLowerCase()) ||
+      fuzzyMatch(r.id, filterPattern) ||
+      fuzzyMatch(r.title, filterPattern)
     );
   });
 
@@ -279,7 +335,7 @@ export async function getAutocompleteForPrefix(
   );
 
   // Sort by relevance
-  withFlags.sort((a, b) => getRelevanceScore(b, prefix, b.files) - getRelevanceScore(a, prefix, a.files));
+  withFlags.sort((a, b) => getRelevanceScore(b, filterPattern, b.files) - getRelevanceScore(a, filterPattern, a.files));
 
   return withFlags.map((r) => {
     const statusIcon = formatStatus(r.status).split(" ")[0];
@@ -291,7 +347,7 @@ export async function getAutocompleteForPrefix(
       .join(" ");
 
     return {
-      value: r.id,
+      value: `${valuePrefix}${r.id}`,
       label: `${statusIcon} ${r.id} - ${r.title}`,
       description: flags || undefined,
     };

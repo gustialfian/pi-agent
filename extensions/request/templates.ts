@@ -19,11 +19,26 @@ export interface TemplateContext {
   started?: string;
 }
 
-function interpolate(template: string, context: TemplateContext): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const value = context[key as keyof TemplateContext];
-    return value !== undefined ? String(value) : `{{${key}}}`;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TemplateContextRecord = Record<string, any>;
+
+// Conditional markers for templates: {{?key}} shows content if key is truthy
+function interpolate(template: string, context: TemplateContextRecord): string {
+  // First pass: handle conditionals {{?key}}content{{/key}}
+  let result = template.replace(/\{\{\?(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, content) => {
+    const value = context[key];
+    return value ? content : "";
   });
+  
+  // Second pass: handle simple replacements {{key}}
+  result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const value = context[key];
+    if (value === undefined) return `{{${key}}}`;
+    if (typeof value === "boolean") return value ? "✅" : "⬜";
+    return String(value);
+  });
+  
+  return result;
 }
 
 // === Request file template ===
@@ -265,14 +280,14 @@ Created: {{created}}
 
 Files:
 - Request: {{requestDir}}/{{id}}/request.md
-{{prdExists}}- ✅ PRD
-{{prdMissing}}- ⬜ PRD (none)
-{{interviewExists}}- ✅ Interview
-{{interviewMissing}}- ⬜ Interview (none)
-{{planExists}}- ✅ Plan
-{{planMissing}}- ⬜ Plan (none)
-{{logExists}}- 🔨 Log
-{{logMissing}}- ⬜ Log (none)`;
+{{?prdExists}}- ✅ PRD
+{{?prdMissing}}- ⬜ PRD (none)
+{{?interviewExists}}- ✅ Interview
+{{?interviewMissing}}- ⬜ Interview (none)
+{{?planExists}}- ✅ Plan
+{{?planMissing}}- ⬜ Plan (none)
+{{?logExists}}- 🔨 Log
+{{?logMissing}}- ⬜ Log (none)`;
 
 export interface StatusContext extends TemplateContext {
   statusIcon?: string;
@@ -289,13 +304,5 @@ export interface StatusContext extends TemplateContext {
 }
 
 export function renderStatusTemplate(context: StatusContext): string {
-  return interpolate(statusTemplate, context)
-    .replace("{{prdExists}}- ✅ PRD\n", "")
-    .replace("{{prdMissing}}- ⬜ PRD (none)\n", "")
-    .replace("{{interviewExists}}- ✅ Interview\n", "")
-    .replace("{{interviewMissing}}- ⬜ Interview (none)\n", "")
-    .replace("{{planExists}}- ✅ Plan\n", "")
-    .replace("{{planMissing}}- ⬜ Plan (none)\n", "")
-    .replace("{{logExists}}- 🔨 Log\n", "")
-    .replace("{{logMissing}}- ⬜ Log (none)\n", "");
+  return interpolate(statusTemplate, context);
 }

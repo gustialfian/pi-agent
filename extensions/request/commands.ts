@@ -9,6 +9,7 @@ import {
   INTERVIEW_FILE,
   LOG_FILE,
   PLAN_FILE,
+  PRD_FILE,
   REQUEST_DIR,
   REQUEST_FILE,
   SKILL_GRILL_ME,
@@ -20,6 +21,7 @@ import {
   listRequests,
   parseRequestMetadata,
   readRequestFile,
+  readRequestFiles,
   saveSessionCwd,
   writeRequestFile,
   type RequestMetadata,
@@ -88,20 +90,26 @@ export function registerReq(pi: ExtensionAPI): void {
         // Subcommand fully typed - now provide ID completions
         if (SUBCOMMANDS.some((sc) => sc.name === subcommand)) {
           const filterFn = getFilterForSubcommand(subcommand);
-          return getAutocompleteForPrefix(getCachedCwd(), subargs, filterFn);
+          return getAutocompleteForPrefix(getCachedCwd(), filterFn, {
+            filterPattern: subargs,
+            valuePrefix: `${subcommand} `,
+          });
         }
       }
 
       // Has subcommand and possibly partial ID
       if (parts.length >= 1 && SUBCOMMANDS.some((sc) => sc.name === subcommand)) {
         const filterFn = getFilterForSubcommand(subcommand);
-        return getAutocompleteForPrefix(getCachedCwd(), subargs, filterFn);
+        return getAutocompleteForPrefix(getCachedCwd(), filterFn, {
+          filterPattern: subargs,
+          valuePrefix: `${subcommand} `,
+        });
       }
 
       return null;
     },
     handler: async (args, ctx) => {
-      saveSessionCwd(pi, ctx.cwd);
+      await saveSessionCwd(pi, ctx.cwd);
       const parts = args?.trim().split(/\s+/) || [];
       const subcommand = parts[0]?.toLowerCase();
       const subargs = parts.slice(1).join(" ");
@@ -115,52 +123,57 @@ export function registerReq(pi: ExtensionAPI): void {
         return;
       }
 
-      switch (subcommand) {
-        case "log":
-          if (!subargs) {
-            ctx.ui.notify('Usage: /req log "your idea title"', "warning");
-            return;
-          }
-          const id = await createRequest(ctx.cwd, subargs.trim());
-          ctx.ui.notify(`Created: ${id}`, "info");
-          break;
+      try {
+        switch (subcommand) {
+          case "log":
+            if (!subargs) {
+              ctx.ui.notify('Usage: /req log "your idea title"', "warning");
+              return;
+            }
+            const id = await createRequest(ctx.cwd, subargs.trim());
+            ctx.ui.notify(`Created: ${id}`, "info");
+            break;
 
-        case "list": {
-          const requests = await listRequests(ctx.cwd);
-          if (requests.length === 0) {
-            ctx.ui.notify("No requests yet.", "info");
-            return;
+          case "list": {
+            const requests = await listRequests(ctx.cwd);
+            if (requests.length === 0) {
+              ctx.ui.notify("No requests yet.", "info");
+              return;
+            }
+            pi.sendMessage({
+              customType: "req-list",
+              content: formatRequestList(requests),
+              display: true,
+            }, { deliverAs: "steer" });
+            break;
           }
-          pi.sendMessage({
-            customType: "req-list",
-            content: formatRequestList(requests),
-            display: true,
-          }, { deliverAs: "steer" });
-          break;
+
+          case "analyze":
+            await handleAnalyze(pi, ctx, subargs);
+            break;
+
+          case "plan":
+            await handlePlan(pi, ctx, subargs);
+            break;
+
+          case "impl":
+            await handleImpl(pi, ctx, subargs);
+            break;
+
+          case "status":
+            await handleStatus(pi, ctx, subargs);
+            break;
+
+          case "done":
+            await handleDone(pi, ctx, subargs);
+            break;
+
+          default:
+            ctx.ui.notify(`Unknown subcommand: ${subcommand}`, "error");
         }
-
-        case "analyze":
-          await handleAnalyze(pi, ctx, subargs);
-          break;
-
-        case "plan":
-          await handlePlan(pi, ctx, subargs);
-          break;
-
-        case "impl":
-          await handleImpl(pi, ctx, subargs);
-          break;
-
-        case "status":
-          await handleStatus(pi, ctx, subargs);
-          break;
-
-        case "done":
-          await handleDone(pi, ctx, subargs);
-          break;
-
-        default:
-          ctx.ui.notify(`Unknown subcommand: ${subcommand}`, "error");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Error in /req ${subcommand}: ${message}`, "error");
       }
     },
   });
@@ -182,34 +195,39 @@ function getFilterForSubcommand(subcommand: string): (r: RequestMetadata) => boo
 
 // === Handler: analyze ===
 async function handleAnalyze(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  if (!id?.trim()) {
+  const trimmedId = id?.trim();
+  if (!trimmedId) {
     ctx.ui.notify("Usage: /req analyze <id>", "warning");
     return;
   }
 
-  const content = await readRequestFile(ctx.cwd, id.trim(), REQUEST_FILE);
+  const content = await readRequestFile(ctx.cwd, trimmedId, REQUEST_FILE);
   if (!content) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ctx.ui.notify(`Request not found: ${trimmedId}`, "error");
     return;
   }
 
   // Update status to analyzing
   const updated = content.replace(/^status:.*$/m, "status: analyzing");
-  await writeRequestFile(ctx.cwd, id.trim(), REQUEST_FILE, updated);
+  await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
 
-  // Create template files
-  const interviewContent = formatInterviewTemplate({ id: id.trim() });
-  await writeRequestFile(ctx.cwd, id.trim(), INTERVIEW_FILE, interviewContent);
+  // Create template files in parallel
+  const [interviewContent, prdContent] = await Promise.all([
+    Promise.resolve(formatInterviewTemplate({ id: trimmedId })),
+    Promise.resolve(formatPrdTemplate({ id: trimmedId })),
+  ]);
+  
+  await Promise.all([
+    writeRequestFile(ctx.cwd, trimmedId, INTERVIEW_FILE, interviewContent),
+    writeRequestFile(ctx.cwd, trimmedId, PRD_FILE, prdContent),
+  ]);
 
-  const prdContent = formatPrdTemplate({ id: id.trim() });
-  await writeRequestFile(ctx.cwd, id.trim(), "prd.md", prdContent);
-
-  ctx.ui.notify(`Starting analysis session for: ${id}`, "info");
+  ctx.ui.notify(`Starting analysis session for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
   const message = formatAnalyzeMessage({
     skillPath: SKILL_GRILL_ME,
-    id: id.trim(),
+    id: trimmedId,
     content,
     requestDir: REQUEST_DIR,
   });
@@ -219,44 +237,44 @@ async function handleAnalyze(pi: ExtensionAPI, ctx: ExtensionCommandContext, id:
 
 // === Handler: plan ===
 async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  if (!id?.trim()) {
+  const trimmedId = id?.trim();
+  if (!trimmedId) {
     ctx.ui.notify("Usage: /req plan <id>", "warning");
     return;
   }
 
-  const requestContent = await readRequestFile(ctx.cwd, id.trim(), REQUEST_FILE);
-  const interviewContent = await readRequestFile(ctx.cwd, id.trim(), INTERVIEW_FILE);
-  const prdContent = await readRequestFile(ctx.cwd, id.trim(), "prd.md");
+  const { request: requestContent, prd: prdContent, interview: interviewContent } = 
+    await readRequestFiles(ctx.cwd, trimmedId);
 
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ctx.ui.notify(`Request not found: ${trimmedId}`, "error");
     return;
   }
 
   if (!prdContent || prdContent.trim().length < 100) {
     ctx.ui.notify(
-      `PRD not ready for ${id}. Fill in prd.md first or run /req analyze.`,
+      `PRD not ready for ${trimmedId}. Fill in prd.md first or run /req analyze.`,
       "error"
     );
     return;
   }
 
-  const meta = await parseRequestMetadata(ctx.cwd, id.trim());
+  const meta = await parseRequestMetadata(ctx.cwd, trimmedId);
 
   // Update status to planned
   const updated = requestContent.replace(/^status:.*$/m, "status: planned");
-  await writeRequestFile(ctx.cwd, id.trim(), REQUEST_FILE, updated);
+  await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
 
   // Create plan template
-  const planContent = formatPlanTemplate({ id: id.trim(), title: meta?.title });
-  await writeRequestFile(ctx.cwd, id.trim(), PLAN_FILE, planContent);
+  const planContent = formatPlanTemplate({ id: trimmedId, title: meta?.title });
+  await writeRequestFile(ctx.cwd, trimmedId, PLAN_FILE, planContent);
 
-  ctx.ui.notify(`Starting planning session for: ${id}`, "info");
+  ctx.ui.notify(`Starting planning session for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
   const message = formatPlanMessage({
     skillPath: SKILL_PRD_TO_PLAN,
-    id: id.trim(),
+    id: trimmedId,
     requestContent,
     prdContent,
     interviewContent: interviewContent ?? undefined,
@@ -268,37 +286,36 @@ async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
 // === Handler: impl ===
 async function handleImpl(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  if (!id?.trim()) {
+  const trimmedId = id?.trim();
+  if (!trimmedId) {
     ctx.ui.notify("Usage: /req impl <id>", "warning");
     return;
   }
 
-  const requestContent = await readRequestFile(ctx.cwd, id.trim(), REQUEST_FILE);
-  const prdContent = await readRequestFile(ctx.cwd, id.trim(), "prd.md");
-  const interviewContent = await readRequestFile(ctx.cwd, id.trim(), INTERVIEW_FILE);
-  const planContent = await readRequestFile(ctx.cwd, id.trim(), PLAN_FILE);
+  const { request: requestContent, prd: prdContent, interview: interviewContent, plan: planContent } = 
+    await readRequestFiles(ctx.cwd, trimmedId);
 
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ctx.ui.notify(`Request not found: ${trimmedId}`, "error");
     return;
   }
 
   if (!planContent) {
-    ctx.ui.notify(`No plan found for ${id}. Run /req plan ${id} first.`, "error");
+    ctx.ui.notify(`No plan found for ${trimmedId}. Run /req plan ${trimmedId} first.`, "error");
     return;
   }
 
-  const logContent = formatLogTemplate({ id: id.trim(), requestDir: REQUEST_DIR });
-  await writeRequestFile(ctx.cwd, id.trim(), LOG_FILE, logContent);
+  const logContent = formatLogTemplate({ id: trimmedId, requestDir: REQUEST_DIR });
+  await writeRequestFile(ctx.cwd, trimmedId, LOG_FILE, logContent);
 
   const updated = requestContent.replace(/^status:.*$/m, "status: implementing");
-  await writeRequestFile(ctx.cwd, id.trim(), REQUEST_FILE, updated);
+  await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
 
-  ctx.ui.notify(`Starting implementation for: ${id}`, "info");
+  ctx.ui.notify(`Starting implementation for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
   const message = formatImplMessage({
-    id: id.trim(),
+    id: trimmedId,
     requestContent,
     prdContent: prdContent ?? undefined,
     interviewContent: interviewContent ?? undefined,
@@ -311,27 +328,24 @@ async function handleImpl(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
 // === Handler: status ===
 async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  if (!id?.trim()) {
+  const trimmedId = id?.trim();
+  if (!trimmedId) {
     ctx.ui.notify("Usage: /req status <id>", "warning");
     return;
   }
 
-  const requestContent = await readRequestFile(ctx.cwd, id.trim(), REQUEST_FILE);
+  const { request: requestContent, prd: prdContent, interview: interviewContent, plan: planContent, log: logContent } = 
+    await readRequestFiles(ctx.cwd, trimmedId);
+
   if (!requestContent) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ctx.ui.notify(`Request not found: ${trimmedId}`, "error");
     return;
   }
 
-  const meta = await parseRequestMetadata(ctx.cwd, id.trim());
-  const [planContent, logContent, interviewContent, prdContent] = await Promise.all([
-    readRequestFile(ctx.cwd, id.trim(), PLAN_FILE),
-    readRequestFile(ctx.cwd, id.trim(), LOG_FILE),
-    readRequestFile(ctx.cwd, id.trim(), INTERVIEW_FILE),
-    readRequestFile(ctx.cwd, id.trim(), "prd.md"),
-  ]);
+  const meta = await parseRequestMetadata(ctx.cwd, trimmedId);
 
   const statusContext: StatusContext = {
-    id: id.trim(),
+    id: trimmedId,
     title: meta?.title || "Unknown",
     created: meta?.timestamp ? new Date(meta.timestamp).toISOString() : "Unknown",
     statusIcon: formatStatus(meta?.status || "idea").split(" ")[0],
@@ -353,29 +367,30 @@ async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: 
 
 // === Handler: done ===
 async function handleDone(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  if (!id?.trim()) {
+  const trimmedId = id?.trim();
+  if (!trimmedId) {
     ctx.ui.notify("Usage: /req done <id>", "warning");
     return;
   }
 
-  const content = await readRequestFile(ctx.cwd, id.trim(), REQUEST_FILE);
+  const content = await readRequestFile(ctx.cwd, trimmedId, REQUEST_FILE);
   if (!content) {
-    ctx.ui.notify(`Request not found: ${id}`, "error");
+    ctx.ui.notify(`Request not found: ${trimmedId}`, "error");
     return;
   }
 
   const updated = content.replace(/^status:.*$/m, "status: done");
-  await writeRequestFile(ctx.cwd, id.trim(), REQUEST_FILE, updated);
+  await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
 
-  const logContent = await readRequestFile(ctx.cwd, id.trim(), LOG_FILE);
+  const { log: logContent } = await readRequestFiles(ctx.cwd, trimmedId);
   if (logContent) {
     const completedLog = logContent
       .replace(/## Progress/, `## Progress\n\n- [x] Implementation complete!`)
       .replace(/### Checkpoint 1:/, `### Completed: ${new Date().toISOString()}\n\n### Checkpoint 1:`);
-    await writeRequestFile(ctx.cwd, id.trim(), LOG_FILE, completedLog);
+    await writeRequestFile(ctx.cwd, trimmedId, LOG_FILE, completedLog);
   }
 
-  ctx.ui.notify(`Request marked as done: ${id}`, "info");
+  ctx.ui.notify(`Request marked as done: ${trimmedId}`, "info");
 }
 
 // === Register message renderer ===
