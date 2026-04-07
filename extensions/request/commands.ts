@@ -109,7 +109,7 @@ export function registerReq(pi: ExtensionAPI): void {
       return null;
     },
     handler: async (args, ctx) => {
-      await saveSessionCwd(pi, ctx.cwd);
+      saveSessionCwd(ctx.cwd);
       const parts = args?.trim().split(/\s+/) || [];
       const subcommand = parts[0]?.toLowerCase();
       const subargs = parts.slice(1).join(" ");

@@ -15,7 +15,6 @@ import {
 
 // === Constants ===
 export const REQUEST_DIR = ".pi/request";
-export const SESSION_TYPE = "req-session";
 
 export const REQUEST_FILE = "request.md";
 export const INTERVIEW_FILE = "interview.md";
@@ -36,9 +35,8 @@ export const SKILL_PRD_TO_PLAN = getSkillPath("prd-to-plan");
 // === Session persistence ===
 let cachedCwd: string | null = null;
 
-export async function saveSessionCwd(pi: ExtensionAPI, cwd: string): Promise<void> {
+export function saveSessionCwd(cwd: string): void {
   cachedCwd = cwd;
-  pi.appendEntry(SESSION_TYPE, { cwd });
 }
 
 export function getCachedCwd(): string {
