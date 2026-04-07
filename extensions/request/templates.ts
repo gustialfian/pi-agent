@@ -88,38 +88,6 @@ export function formatInterviewTemplate(context: TemplateContext): string {
   return interpolate(interviewTemplate, context);
 }
 
-// === Log file template ===
-export const logTemplate = `# Implementation Log: {{id}}
-
-## Started: {{started}}
-
-## Request
-\`{{requestDir}}/{{id}}/request.md\`
-
-## Plan
-\`{{requestDir}}/{{id}}/plan.md\`
-
-## Progress
-
-- [ ] Implementation tasks...
-
-## Checkpoints
-
-### Checkpoint 1: {{started}}
-<!-- Document progress at this point -->
-
----
-*Update this log file to track progress. This allows pausing and resuming.*
-
-`;
-
-export function formatLogTemplate(context: TemplateContext): string {
-  return interpolate(logTemplate, {
-    started: new Date().toISOString(),
-    ...context,
-  });
-}
-
 // === PRD file template ===
 export const prdTemplate = `## Problem Statement
 The problem from the user's perspective.
@@ -156,6 +124,17 @@ export const planTemplate = `# Plan: {{title}}
 
 > Source PRD: {{requestDir}}/{{id}}/prd.md
 
+## Architectural decisions
+
+Durable decisions that apply across all phases:
+
+- **Routes**: ...
+- **Schema**: ...
+- **Key models**: ...
+- (add/remove sections as appropriate)
+
+---
+
 ## Phase 1: [Title]
 
 <!-- What to build -->
@@ -177,6 +156,38 @@ export function formatPlanTemplate(context: TemplateContext): string {
   });
 }
 
+// === Log file template ===
+export const logTemplate = `# Implementation Log: {{id}}
+
+## Started: {{started}}
+
+## Request
+\`{{requestDir}}/{{id}}/request.md\`
+
+## Plan
+\`{{requestDir}}/{{id}}/plan.md\`
+
+## Progress
+
+- [ ] Implementation tasks...
+
+## Checkpoints
+
+### Checkpoint 1: {{started}}
+<!-- Document progress at this point -->
+
+---
+*Update this log file to track progress. This allows pausing and resuming.*
+
+`;
+
+export function formatLogTemplate(context: TemplateContext): string {
+  return interpolate(logTemplate, {
+    started: new Date().toISOString(),
+    ...context,
+  });
+}
+
 // === Analyze message (sent to agent) ===
 export const analyzeMessageTemplate = `/skill:{{skillPath}}
 
@@ -191,10 +202,10 @@ export const analyzeMessageTemplate = `/skill:{{skillPath}}
 Please analyze this request using the grill-me framework.
 
 After the interview is complete:
-1. Save the full interview transcript to: \`{{requestDir}}/{{id}}/interview.md\`
+1. Fill in the Interview template at: \`{{requestDir}}/{{id}}/interview.md\`
 2. Fill in the PRD template at: \`{{requestDir}}/{{id}}/prd.md\`
 
-The PRD template has been created. Fill in each section with the analysis results.`;
+The PRD template and Interview template has been created. Fill in each section with the results.`;
 
 export function formatAnalyzeMessage(context: TemplateContext): string {
   return interpolate(analyzeMessageTemplate, context);
@@ -210,11 +221,11 @@ export const planMessageTemplate = `/skill:{{skillPath}}
 ### Original Request
 {{requestContent}}
 
-### PRD
-{{prdContent}}
-
 ### Interview
 {{interviewContent}}
+
+### PRD
+{{prdContent}}
 
 ---
 
@@ -239,13 +250,13 @@ export const implMessageTemplate = `## Implementation Session for: {{id}}
 
 {{requestContent}}
 
-### PRD (Product Requirements)
-
-{{prdContent}}
-
 ### Interview Notes
 
 {{interviewContent}}
+
+### PRD (Product Requirements)
+
+{{prdContent}}
 
 ### Implementation Plan
 
