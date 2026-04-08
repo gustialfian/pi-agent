@@ -195,7 +195,7 @@ export const analyzeMessageTemplate = `/skill:{{skillPath}}
 
 ## Request to Analyze
 
-{{content}}
+\`{{requestDir}}/{{id}}/request.md\`
 
 ---
 
@@ -219,13 +219,13 @@ export const planMessageTemplate = `/skill:{{skillPath}}
 ## Request: {{id}}
 
 ### Original Request
-{{requestContent}}
+\`{{requestDir}}/{{id}}/request.md\`
 
 ### Interview
-{{interviewContent}}
+\`{{requestDir}}/{{id}}/interview.md\`
 
 ### PRD
-{{prdContent}}
+\`{{requestDir}}/{{id}}/prd.md\`
 
 ---
 
@@ -247,20 +247,16 @@ export function formatPlanMessage(context: TemplateContext): string {
 export const implMessageTemplate = `## Implementation Session for: {{id}}
 
 ### Original Request
+\`{{requestDir}}/{{id}}/request.md\`
 
-{{requestContent}}
+### Interview
+\`{{requestDir}}/{{id}}/interview.md\`
 
-### Interview Notes
-
-{{interviewContent}}
-
-### PRD (Product Requirements)
-
-{{prdContent}}
+### PRD
+\`{{requestDir}}/{{id}}/prd.md\`
 
 ### Implementation Plan
-
-{{planContent}}
+\`{{requestDir}}/{{id}}/plan.md\`
 
 ---
 
