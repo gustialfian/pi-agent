@@ -188,8 +188,8 @@ export function formatLogTemplate(context: TemplateContext): string {
   });
 }
 
-// === Analyze message (sent to agent) ===
-export const analyzeMessageTemplate = `/skill:{{skillPath}}
+// === Research message (sent to agent) ===
+export const researchMessageTemplate = `/skill:{{skillPath}}
 
 ---
 
@@ -199,7 +199,7 @@ export const analyzeMessageTemplate = `/skill:{{skillPath}}
 
 ---
 
-Please analyze this request using the grill-me framework.
+Please research this request using the grill-me framework.
 
 After the interview is complete:
 1. Fill in the Interview template at: \`{{requestDir}}/{{id}}/interview.md\`
@@ -207,8 +207,8 @@ After the interview is complete:
 
 The PRD template and Interview template has been created. Fill in each section with the results.`;
 
-export function formatAnalyzeMessage(context: TemplateContext): string {
-  return interpolate(analyzeMessageTemplate, context);
+export function formatResearchMessage(context: TemplateContext): string {
+  return interpolate(researchMessageTemplate, context);
 }
 
 // === Plan message (sent to agent) ===
@@ -237,8 +237,8 @@ The plan template has been created. Fill in each phase with the implementation d
 
 export function formatPlanMessage(context: TemplateContext): string {
   return interpolate(planMessageTemplate, {
-    prdContent: context.prdContent || "_No PRD found. Run /req analyze first._",
-    interviewContent: context.interviewContent || "_No interview conducted yet. Run /req analyze first._",
+    prdContent: context.prdContent || "_No PRD found. Run /req research first._",
+    interviewContent: context.interviewContent || "_No interview conducted yet. Run /req research first._",
     ...context,
   });
 }
@@ -273,8 +273,8 @@ Keep the log file updated to allow pausing and resuming without losing context.`
 
 export function formatImplMessage(context: TemplateContext): string {
   return interpolate(implMessageTemplate, {
-    prdContent: context.prdContent || "_No PRD found. Run /req analyze first._",
-    interviewContent: context.interviewContent || "_No interview conducted yet. Run /req analyze first._",
+    prdContent: context.prdContent || "_No PRD found. Run /req research first._",
+    interviewContent: context.interviewContent || "_No interview conducted yet. Run /req research first._",
     ...context,
   });
 }

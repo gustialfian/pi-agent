@@ -27,7 +27,7 @@ import {
   type RequestMetadata,
 } from "./lib";
 import {
-  formatAnalyzeMessage,
+  formatResearchMessage,
   formatImplMessage,
   formatInterviewTemplate,
   formatLogTemplate,
@@ -42,7 +42,7 @@ import {
 const SUBCOMMANDS = [
   { name: "log", description: "Create new request", usage: '/req log "title"', needsId: false },
   { name: "list", description: "List all requests", usage: "/req list", needsId: false },
-  { name: "analyze", description: "Analyze with grill-me", usage: "/req analyze <id>", needsId: true },
+  { name: "research", description: "Research with grill-me", usage: "/req research <id>", needsId: true },
   { name: "plan", description: "Create plan with prd-to-plan", usage: "/req plan <id>", needsId: true },
   { name: "impl", description: "Start implementation", usage: "/req impl <id>", needsId: true },
   { name: "status", description: "Show request status", usage: "/req status <id>", needsId: true },
@@ -75,7 +75,7 @@ export function registerReq(pi: ExtensionAPI): void {
         }));
       }
 
-      // Partial subcommand match (typing "/req an" should suggest "analyze")
+      // Partial subcommand match (typing "/req re" should suggest "research")
       if (parts.length === 1) {
         const matchingCommands = SUBCOMMANDS.filter((sc) =>
           sc.name.startsWith(subcommand)
@@ -148,8 +148,8 @@ export function registerReq(pi: ExtensionAPI): void {
             break;
           }
 
-          case "analyze":
-            await handleAnalyze(pi, ctx, subargs);
+          case "research":
+            await handleResearch(pi, ctx, subargs);
             break;
 
           case "plan":
@@ -183,7 +183,7 @@ export function registerReq(pi: ExtensionAPI): void {
 function getFilterForSubcommand(subcommand: string): (r: RequestMetadata) => boolean {
   switch (subcommand) {
     case "plan":
-      return (r) => ["idea", "analyzing", "planned"].includes(r.status);
+      return (r) => ["idea", "researching", "planned"].includes(r.status);
     case "impl":
       return (r) => r.status === "planned";
     case "done":
@@ -193,11 +193,11 @@ function getFilterForSubcommand(subcommand: string): (r: RequestMetadata) => boo
   }
 }
 
-// === Handler: analyze ===
-async function handleAnalyze(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
+// === Handler: research ===
+async function handleResearch(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
   const trimmedId = id?.trim();
   if (!trimmedId) {
-    ctx.ui.notify("Usage: /req analyze <id>", "warning");
+    ctx.ui.notify("Usage: /req research <id>", "warning");
     return;
   }
 
@@ -207,8 +207,8 @@ async function handleAnalyze(pi: ExtensionAPI, ctx: ExtensionCommandContext, id:
     return;
   }
 
-  // Update status to analyzing
-  const updated = content.replace(/^status:.*$/m, "status: analyzing");
+  // Update status to researching
+  const updated = content.replace(/^status:.*$/m, "status: researching");
   await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
 
   // Create template files in parallel
@@ -225,7 +225,7 @@ async function handleAnalyze(pi: ExtensionAPI, ctx: ExtensionCommandContext, id:
   ctx.ui.notify(`Starting analysis session for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
-  const message = formatAnalyzeMessage({
+  const message = formatResearchMessage({
     skillPath: SKILL_GRILL_ME,
     id: trimmedId,
     content,
@@ -253,7 +253,7 @@ async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
   if (!prdContent || prdContent.trim().length < 100) {
     ctx.ui.notify(
-      `PRD not ready for ${trimmedId}. Fill in prd.md first or run /req analyze.`,
+      `PRD not ready for ${trimmedId}. Fill in prd.md first or run /req research.`,
       "error"
     );
     return;
