@@ -23,6 +23,7 @@ import {
   readRequestFile,
   readRequestFiles,
   saveSessionCwd,
+  validateRequestId,
   writeRequestFile,
   type RequestMetadata,
 } from "./lib";
@@ -182,8 +183,10 @@ export function registerReq(pi: ExtensionAPI): void {
 // === Filter functions for autocomplete ===
 function getFilterForSubcommand(subcommand: string): (r: RequestMetadata) => boolean {
   switch (subcommand) {
+    case "research":
+      return (r) => ["idea"].includes(r.status);
     case "plan":
-      return (r) => ["idea", "researching", "planned"].includes(r.status);
+      return (r) => ["idea", "analyzing", "researching", "planned"].includes(r.status);
     case "impl":
       return (r) => r.status === "planned";
     case "done":
@@ -195,11 +198,7 @@ function getFilterForSubcommand(subcommand: string): (r: RequestMetadata) => boo
 
 // === Handler: research ===
 async function handleResearch(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  const trimmedId = id?.trim();
-  if (!trimmedId) {
-    ctx.ui.notify("Usage: /req research <id>", "warning");
-    return;
-  }
+  const trimmedId = validateRequestId(id);
 
   const content = await readRequestFile(ctx.cwd, trimmedId, REQUEST_FILE);
   if (!content) {
@@ -237,11 +236,7 @@ async function handleResearch(pi: ExtensionAPI, ctx: ExtensionCommandContext, id
 
 // === Handler: plan ===
 async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  const trimmedId = id?.trim();
-  if (!trimmedId) {
-    ctx.ui.notify("Usage: /req plan <id>", "warning");
-    return;
-  }
+  const trimmedId = validateRequestId(id);
 
   const { request: requestContent, prd: prdContent, interview: interviewContent } = 
     await readRequestFiles(ctx.cwd, trimmedId);
@@ -286,11 +281,7 @@ async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
 // === Handler: impl ===
 async function handleImpl(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  const trimmedId = id?.trim();
-  if (!trimmedId) {
-    ctx.ui.notify("Usage: /req impl <id>", "warning");
-    return;
-  }
+  const trimmedId = validateRequestId(id);
 
   const { request: requestContent, prd: prdContent, interview: interviewContent, plan: planContent } = 
     await readRequestFiles(ctx.cwd, trimmedId);
@@ -328,11 +319,7 @@ async function handleImpl(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
 // === Handler: status ===
 async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  const trimmedId = id?.trim();
-  if (!trimmedId) {
-    ctx.ui.notify("Usage: /req status <id>", "warning");
-    return;
-  }
+  const trimmedId = validateRequestId(id);
 
   const { request: requestContent, prd: prdContent, interview: interviewContent, plan: planContent, log: logContent } = 
     await readRequestFiles(ctx.cwd, trimmedId);
@@ -367,11 +354,7 @@ async function handleStatus(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: 
 
 // === Handler: done ===
 async function handleDone(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: string): Promise<void> {
-  const trimmedId = id?.trim();
-  if (!trimmedId) {
-    ctx.ui.notify("Usage: /req done <id>", "warning");
-    return;
-  }
+  const trimmedId = validateRequestId(id);
 
   const content = await readRequestFile(ctx.cwd, trimmedId, REQUEST_FILE);
   if (!content) {

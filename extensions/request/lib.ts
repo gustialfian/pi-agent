@@ -5,9 +5,8 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { AutocompleteItem } from "@mariozechner/pi-tui";
-import { readdir, readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, stat, access } from "node:fs/promises";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import {
   formatRequestTemplate,
@@ -76,6 +75,23 @@ export function parseId(id: string): { timestamp: number; slug: string } | null 
   return { timestamp, slug };
 }
 
+/**
+ * Validate a request ID before file operations.
+ * Rejects path-traversal attempts (.., /, \) and requires
+ * the ID to match the expected format (timestamp-slug).
+ */
+export function validateRequestId(id: string): string {
+  const trimmed = id.trim();
+  if (trimmed.includes('..') || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new Error(`Invalid request ID: ${id}`);
+  }
+  // Also verify it parses as a valid ID
+  if (!parseId(trimmed)) {
+    throw new Error(`Invalid request ID format: ${id}`);
+  }
+  return trimmed;
+}
+
 // === File path helpers ===
 export function getRequestDir(cwd: string, id: string): string {
   return join(cwd, REQUEST_DIR, id);
@@ -87,15 +103,17 @@ export function getRequestPath(cwd: string, id: string, filename: string): strin
 
 export async function ensureRequestDir(cwd: string, id: string): Promise<string> {
   const dir = getRequestDir(cwd, id);
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
+  await mkdir(dir, { recursive: true });
   return dir;
 }
 
 export async function getRequestDirs(cwd: string): Promise<string[]> {
   const dir = join(cwd, REQUEST_DIR);
-  if (!existsSync(dir)) return [];
+  try {
+    await access(dir);
+  } catch {
+    return [];
+  }
   const entries = await readdir(dir);
   const dirs: string[] = [];
   
@@ -150,7 +168,7 @@ export async function writeRequestFile(cwd: string, id: string, filename: string
 }
 
 // === Types ===
-export type RequestStatus = "idea" | "analyzing" | "planned" | "implementing" | "done";
+export type RequestStatus = "idea" | "analyzing" | "researching" | "planned" | "implementing" | "done";
 
 export interface RequestMetadata {
   id: string;
@@ -177,7 +195,7 @@ export async function parseRequestMetadata(cwd: string, id: string): Promise<Req
   const statusMatch = content.match(/^status:\s*(.+)$/m);
   if (statusMatch) {
     const s = statusMatch[1].trim().toLowerCase();
-    if (["idea", "analyzing", "planned", "implementing", "done"].includes(s)) {
+    if (["idea", "analyzing", "researching", "planned", "implementing", "done"].includes(s)) {
       status = s as RequestStatus;
     }
   }
@@ -255,7 +273,8 @@ function getRelevanceScore(
 
   // Status progression priority (recent states first)
   const statusOrder: Record<RequestStatus, number> = {
-    implementing: 5,
+    implementing: 6,
+    researching: 5,
     analyzing: 4,
     planned: 3,
     idea: 2,
