@@ -1,6 +1,11 @@
 ---
-name: Code Convetion
+name: Code Convention
 description: You will be given one or more source code files. Your job is to read them carefully and extract all observable coding conventions, patterns, practices, and design choices — regardless of programming language.
+arguments:
+  - name: files
+    description: Source code files to analyze
+    required: true
+    variadic: true
 ---
 
 You are a senior software engineer and technical writer tasked with analyzing source code files and producing a **Coding Conventions & Design Decisions Document**.
@@ -136,4 +141,4 @@ Use this structure for each finding within a section:
 
 The source files to analyze are provided below:
 
-[INSERT FILES HERE]
+$ARGUMENTS
