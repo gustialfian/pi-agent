@@ -1,7 +1,0 @@
-{
-  "lastChangelogVersion": "0.66.1",
-  "defaultProvider": "minimax",
-  "defaultModel": "MiniMax-M2.7",
-  "hideThinkingBlock": true,
-  "theme": "catppuccin-macchiato"
-}
