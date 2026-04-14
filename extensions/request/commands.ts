@@ -221,6 +221,9 @@ async function handleResearch(pi: ExtensionAPI, ctx: ExtensionCommandContext, id
     writeRequestFile(ctx.cwd, trimmedId, PRD_FILE, prdContent),
   ]);
 
+  // Set session display name
+  pi.setSessionName(`research ${trimmedId}`);
+
   ctx.ui.notify(`Starting analysis session for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
@@ -264,6 +267,9 @@ async function handlePlan(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
   const planContent = formatPlanTemplate({ id: trimmedId, title: meta?.title });
   await writeRequestFile(ctx.cwd, trimmedId, PLAN_FILE, planContent);
 
+  // Set session display name
+  pi.setSessionName(`plan ${trimmedId}`);
+
   ctx.ui.notify(`Starting planning session for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
 
@@ -301,6 +307,9 @@ async function handleImpl(pi: ExtensionAPI, ctx: ExtensionCommandContext, id: st
 
   const updated = requestContent.replace(/^status:.*$/m, "status: implementing");
   await writeRequestFile(ctx.cwd, trimmedId, REQUEST_FILE, updated);
+
+  // Set session display name
+  pi.setSessionName(`impl ${trimmedId}`);
 
   ctx.ui.notify(`Starting implementation for: ${trimmedId}`, "info");
   await ctx.waitForIdle();
