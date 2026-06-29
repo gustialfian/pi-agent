@@ -4,3 +4,4 @@ auth.json
 settings.json
 sessions/
 .pi/
+trust.json
