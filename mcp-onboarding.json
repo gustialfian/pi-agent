@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "sharedConfigHintShown": true,
+  "setupCompleted": false,
+  "lastDiscoveryFingerprint": "{\"sources\":[[\"shared-global\",false,0],[\"agents-global\",false,0],[\"agents-nested-global\",false,0],[\"pi-global\",false,0],[\"shared-project\",true,1],[\"pi-project\",false,0]],\"imports\":[[\"claude-code\",\"/home/alfian/.claude.json\",0],[\"opencode\",\"/home/alfian/code/sandbox/cx-taskman/opencode.json\",1]],\"hostConfigDiscovery\":\"off\",\"conflicts\":[{\"serverName\":\"laravel-boost\",\"sources\":[{\"kind\":\"host\",\"path\":\"/home/alfian/code/sandbox/cx-taskman/opencode.json\"},{\"kind\":\"shared\",\"path\":\"/home/alfian/code/sandbox/cx-taskman/.mcp.json\"}],\"winner\":{\"kind\":\"shared\",\"path\":\"/home/alfian/code/sandbox/cx-taskman/.mcp.json\"}}]}"
+}
