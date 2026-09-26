@@ -1,8 +1,12 @@
 node_modules/
 sessions/
 .pi/
+bin/
+install/
 
 auth.json
 settings.json
 models-store.json
 trust.json
+mcp-cache.json
+mcp-onboarding.json

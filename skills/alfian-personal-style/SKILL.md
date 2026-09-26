@@ -1,6 +1,7 @@
 ---
 name: alfian-personal-style
 description: Styles and reviews user interfaces in Alfian's personal visual language. Use when designing, building, restyling, or visually reviewing a UI for Alfian.
+disable-model-invocation: true
 ---
 
 # Personal Style
