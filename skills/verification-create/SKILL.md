@@ -49,7 +49,21 @@ Exercise the public interface appropriate to the claim. A UI claim requires UI a
 
 Prefer a persistent controller for agent-facing browser CLIs. Launch the isolated app and browser once, then keep them alive across commands until explicit shutdown. Let the agent compose feature commands against the same session without repeating startup, authentication, or fixture setup. Reuse an existing controller when available.
 
-Keep app lifecycle, isolation, and evidence capture separate from feature-specific actions. Use private session metadata, authenticated local control, serialized commands, bounded startup, an idle timeout, and explicit shutdown. Isolate separate verification runs from one another. Start a fresh session when a check requires fresh state, not for every command. Use a single-run script when the task needs only one fixed sequence and no interactive command composition.
+Example CLI shape for a browser-driven transfer app (adapt commands to the target repo; these are illustrative, not shipped tools):
+
+```sh
+npx playwright install chromium  # Once
+node control launch
+node control doctor
+node control initialize
+node control list
+node control transfer <from-id> <to-id> 2500
+node control close
+```
+
+`launch` keeps the app and browser alive across separate invocations. `initialize` prepares disposable fixtures, `list` exposes IDs and current state, and `transfer` performs a user-facing action in that session. Read state again to check the transfer persisted. `close` stops owned processes and finalizes evidence while preserving artifacts.
+
+Keep app lifecycle, isolation, and evidence capture separate from feature-specific actions. Use private session metadata, authenticated local control, serialized commands, bounded startup, an idle timeout, and explicit shutdown. Isolate separate verification runs from one another. Start a fresh session when a check requires fresh state, not for every command.
 
 Never automatically retry a mutation after a timeout. It may have succeeded. Inspect the resulting state and evidence before deciding what to do next.
 
