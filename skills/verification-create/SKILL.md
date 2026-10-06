@@ -40,7 +40,7 @@ Include these sections:
 
 - **Launch.** Document prerequisites, the startup command, readiness checks, time limits, and teardown. For short-lived commands, build or install once and run each check in its own isolated process or terminal session.
 - **Doctor.** Provide a read-only check of instance ownership, app health, expected build, and authentication where applicable. Distinguish a reachable controller from a healthy app. Run this check before driving and whenever results look wrong.
-- **Drive.** Document real controls, commands, routes, and expected results. Prefer accessible names and stable identifiers. Scope repeated items by identity. Wait for observable readiness and inspect errors rather than relying on fixed sleeps.
+- **Drive.** Document real controls, commands, routes, and expected results. Prefer the project's UI contract IDs where one exists, then accessible names and stable identifiers. Scope repeated items by identity. Wait for observable readiness and inspect errors rather than relying on fixed sleeps.
 - **Evidence.** Name the artifact directory and explain how to inspect its contents. Record actions, expected and observed results, failures, and the feature entry point used. Capture relevant UI, terminal, network, or file evidence. Read state again after mutations to check persistence. A successful command or success message alone does not prove the feature.
 - **Cleanup.** Stop only processes the run started. Make cleanup available even when the app is unhealthy. Remove active-session metadata and temporary files, but preserve proof artifacts. Document stale-session recovery without guessing which processes are safe to terminate.
 - **Maintenance.** Explain which docs, selectors, assertions, command schemas, and helper tests must change together when behavior changes.
@@ -48,6 +48,8 @@ Include these sections:
 Exercise the public interface appropriate to the claim. A UI claim requires UI actions. Public API behavior can be checked through API requests. Use internal state reads only as additional evidence, not as a substitute for the user path. Use mocks only at existing external integration boundaries and report what they exclude from the proof.
 
 Prefer a persistent controller for agent-facing browser CLIs. Launch the isolated app and browser once, then keep them alive across commands until explicit shutdown. Let the agent compose feature commands against the same session without repeating startup, authentication, or fixture setup. Reuse an existing controller when available.
+
+For a web UI driven through Playwright, read [the web UI contract](references/web-ui-contract.md) before writing the CLI. It explains the preferred design: a typed registry of test IDs shared by the frontend, tests, and CLI, with commands that address elements by logical path. It also covers when to get approval before instrumenting product code.
 
 Example CLI shape for a browser-driven transfer app (adapt commands to the target repo; these are illustrative, not shipped tools):
 
