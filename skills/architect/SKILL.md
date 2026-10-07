@@ -23,6 +23,7 @@ Read `references/sketch-guide.md` and `references/rationale-template.md`. For ap
 - Core types and sequencing: `../principle-foundational-thinking/SKILL.md`.
 - Integrating new requirements: `../principle-redesign-from-first-principles/SKILL.md`.
 - Simplifying before construction: `../principle-subtract-before-you-add/SKILL.md`.
+- Replacing internal APIs when callers can migrate together and no external or mixed-version compatibility is required: `../principle-migrate-callers-then-delete-legacy-apis/SKILL.md`.
 - Encoding recurring corrections and invariants: `../principle-encode-lessons-in-structure/SKILL.md`.
 - Validation and adapters: `../principle-boundary-discipline/SKILL.md`.
 - Reducing code and indirection: `../principle-laziness-protocol/SKILL.md`.
