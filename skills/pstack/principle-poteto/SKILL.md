@@ -9,6 +9,7 @@ disable-model-invocation: true
 Read and apply the references relevant to the task:
 
 - Core types, data structures, concurrency, and sequencing: `references/foundational-thinking.md`.
+- Commands, lifecycle steps, and processing loops facing crashes, restarts, or retries: `references/make-operations-idempotent.md`.
 - Integrating a brand-new feature or requirement: `references/redesign-from-first-principles.md`.
 - Simplifying before construction: `references/subtract-before-you-add.md`.
 - Fixing bugs or implementation details with minimal code and indirection: `references/laziness-protocol.md`.

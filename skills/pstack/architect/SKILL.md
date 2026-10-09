@@ -18,7 +18,7 @@ Skip grounding only for genuinely greenfield work with no surrounding system to 
 
 ## Phase B: Sketch
 
-Read `references/sketch-guide.md` and `references/rationale-template.md`. Read `../principle-poteto/SKILL.md` and its applicable references for core types and sequencing, integrating new requirements, simplification, internal API migration, structural enforcement, validation and adapters, and reducing indirection. For types and signatures, read its `references/type-system-discipline.md`.
+Read `references/sketch-guide.md` and `references/rationale-template.md`. Read `../principle-poteto/SKILL.md` and its applicable references for core types and sequencing, integrating new requirements, simplification, internal API migration, structural enforcement, validation and adapters, reducing indirection, and idempotent operations under retries or partial failure. For types and signatures, read its `references/type-system-discipline.md`.
 
 Produce at least two structurally distinct candidate sketches sequentially. Variations of the same shape do not count. If constraints rule out an alternative, record the concrete constraint that makes it nonviable.
 
